@@ -6,7 +6,6 @@ app = FastAPI()
 
 KEITARO_API_KEY = os.environ["KEITARO_API_KEY"]
 KEITARO_API_URL = os.environ["KEITARO_API_URL"]
-CAMPAIGN_ID = os.environ["CAMPAIGN_ID"]
 
 @app.post("/jira-to-keitaro")
 async def webhook(request: Request):
@@ -18,20 +17,20 @@ async def webhook(request: Request):
     links = [line.strip() for line in description.splitlines() if line.startswith("http")]
 
     for link in links:
-        create_stream(summary, link)
+        create_offer(summary, link, description)
 
-    return {"status": "success", "streams_created": len(links)}
+    return {"status": "success", "offers_created": len(links)}
 
-def create_stream(name, url):
+def create_offer(name, url, notes):
     headers = {
         "Api-Key": KEITARO_API_KEY,
         "Content-Type": "application/json"
     }
     data = {
-        "campaign_id": int(CAMPAIGN_ID),
         "name": name,
-        "action": "redirect",
-        "url": url
+        "url": url,
+        "notes": notes,
+        "group_id": None
     }
-    r = requests.post(f"{KEITARO_API_URL}/admin_api/v1/streams", json=data, headers=headers)
-    print(f"Keitaro response: {r.status_code} — {r.text}")
+    r = requests.post(f"{KEITARO_API_URL}/admin_api/v1/offers", json=data, headers=headers)
+    print(f"Keitaro offer response: {r.status_code} — {r.text}")
