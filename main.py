@@ -1,14 +1,13 @@
-
-from fastapi import FastAPI, Request
+import os
+from fastapi import FastAPI
 import uvicorn
 
 app = FastAPI()
 
-@app.post("/jira-to-keitaro")
-async def handle_webhook(request: Request):
-    data = await request.json()
-    print("Webhook received:", data)
-    return {"status": "ok"}
+@app.get("/")
+def read_root():
+    return {"message": "Hello from Railway!"}
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
