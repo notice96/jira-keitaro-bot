@@ -17,8 +17,17 @@ def parse_offer_data(summary: str, description: str):
     buyer = re.search(r"Баер:\s*(.+)", description)
     pp = re.search(r"ПП:\s*(.+)", description)
 
-    # ссылки
-    links = re.findall(r"(Reg\.Form|Wheel[^\n]*|Crazy[^\n]*|Lightning[^\n]*).*?(https?://[\w\.-/?=&%]+)", description)
+    # Поддержка Jira markdown ссылок: [текст|ссылка]
+    markdown_links = re.findall(r"\[(.*?)\|(https?://[\w\.-/?=&%]+)\]", description)
+    # Плюс — прямые обычные ссылки без markdown
+    plain_links = re.findall(r"(https?://[\w\.-/?=&%]+)", description)
+
+    # Преобразуем markdown ссылки в (название, ссылка)
+    links = [(title.strip(), url.strip()) for title, url in markdown_links]
+
+    # Если нет markdown, используем plain ссылки
+    if not links and plain_links:
+        links = [(f"Link {i+1}", url) for i, url in enumerate(plain_links)]
 
     return {
         "id": summary.strip(),
