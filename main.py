@@ -1,13 +1,14 @@
-import os
-import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 app = FastAPI()
 
 @app.get("/")
-def read_root():
+async def root():
     return {"message": "Hello from Railway"}
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+@app.post("/jira-to-keitaro")
+async def jira_to_keitaro(request: Request):
+    data = await request.json()
+    print("Получен запрос от JIRA:", data)
+    # Здесь добавь отправку оффера в Keitaro при необходимости
+    return {"status": "ok"}
