@@ -1,11 +1,10 @@
 from fastapi import FastAPI, Request
 import httpx
 import re
-import os
 
 app = FastAPI()
 
-KEITARO_API_URL = "https://your-keitaro-domain/admin_api/v1/offers"
+KEITARO_API_URL = "http://77.221.155.15/admin_api/v1/offers"
 KEITARO_API_KEY = "0ed98ed7f659004f3f7e68e68984b2fa"
 
 def parse_offer_data(description: str, title: str):
