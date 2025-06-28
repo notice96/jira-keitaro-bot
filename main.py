@@ -1,18 +1,18 @@
-
-import os
-import re
-import requests
 from fastapi import FastAPI, Request
+import httpx
+import re
+import os
 
 app = FastAPI()
 
-KEITARO_API_URL = os.getenv("KEITARO_API_URL")
-KEITARO_API_KEY = os.getenv("KEITARO_API_KEY")
+API_KEY = os.getenv("KEITARO_API_KEY")
+KEITARO_URL = os.getenv("KEITARO_API_URL") + "/offers"
 
 
-def parse_offer(description: str):
-    result = {
-        "id": "",
+def parse_offer(summary, description):
+    offer_id = summary.strip()
+    fields = {
+        "id": offer_id,
         "product": "",
         "geo": "",
         "payout": "",
@@ -24,71 +24,66 @@ def parse_offer(description: str):
         "links": []
     }
 
-    lines = [line.strip() for line in description.strip().split("\n") if line.strip()]
-    current_label = ""
+    lines = description.splitlines()
     for line in lines:
-        if line.startswith("id_prod{"):
-            result["id"] = line
-        elif line.startswith("Продукт:"):
-            result["product"] = line.replace("Продукт:", "").strip()
-        elif line.startswith("Гео:"):
-            result["geo"] = line.replace("Гео:", "").strip()
-        elif line.startswith("Ставка:"):
-            result["payout"] = line.replace("Ставка:", "").strip()
-        elif line.startswith("Валюта:"):
-            result["currency"] = line.replace("Валюта:", "").strip()
-        elif line.startswith("Капа:"):
-            result["cap"] = line.replace("Капа:", "").strip()
-        elif line.startswith("Сорс:"):
-            result["source"] = line.replace("Сорс:", "").strip()
-        elif line.startswith("Баер:"):
-            result["buyer"] = line.replace("Баер:", "").strip()
-        elif line.startswith("ПП:"):
-            result["pp"] = line.replace("ПП:", "").strip()
-        elif re.match(r"^(https?://)", line):
-            result["links"].append((current_label, line))
-        else:
-            current_label = line
+        if "Продукт:" in line:
+            fields["product"] = line.split(":", 1)[-1].strip()
+        elif "Гео:" in line:
+            fields["geo"] = line.split(":", 1)[-1].strip()
+        elif "Ставка:" in line:
+            fields["payout"] = line.split(":", 1)[-1].strip()
+        elif "Валюта:" in line:
+            fields["currency"] = line.split(":", 1)[-1].strip()
+        elif "Капа:" in line:
+            fields["cap"] = line.split(":", 1)[-1].strip()
+        elif "Сорс:" in line:
+            fields["source"] = line.split(":", 1)[-1].strip()
+        elif "Баер:" in line:
+            fields["buyer"] = line.split(":", 1)[-1].strip()
+        elif "ПП:" in line:
+            fields["pp"] = line.split(":", 1)[-1].strip()
 
-    return result
+    for i in range(len(lines)):
+        line = lines[i].strip()
+        if line.startswith("http://") or line.startswith("https://"):
+            label = lines[i - 1].strip() if i > 0 else ""
+            fields["links"].append((label, line))
+
+    return fields
 
 
 @app.post("/jira-to-keitaro")
 async def webhook(request: Request):
     data = await request.json()
+    summary = data.get("issue", {}).get("fields", {}).get("summary", "")
+    description_blocks = data.get("issue", {}).get("fields", {}).get("description", {}).get("content", [])
 
-    description = data.get("issue", {}).get("fields", {}).get("description", "")
-    if not isinstance(description, str):
-        return {"error": "Invalid description format."}
+    desc_text = ""
+    for block in description_blocks:
+        for inner in block.get("content", []):
+            desc_text += inner.get("text", "") + "\n"
 
-    parsed = parse_offer(description)
+    parsed = parse_offer(summary, desc_text)
+    print("=== Parsed Offer Data ===", parsed)
 
-    print("\n=== Parsed Offer Data ===", parsed)
-
+    headers = {"Api-Key": API_KEY}
     for label, url in parsed["links"]:
-        offer_name = f"{parsed['id']} - Продукт: {parsed['product']} Гео: {parsed['geo']} Ставка: {parsed['payout']} Валюта: {parsed['currency']} Капа: {parsed['cap']} Сорс: {parsed['source']} Баер: {parsed['buyer']} - {label}"
-
-        payload = {
+        offer_name = (
+            f'{parsed["id"]} - Продукт: {parsed["product"]} Гео: {parsed["geo"]} '
+            f'Ставка: {parsed["payout"]} Валюта: {parsed["currency"]} Капа: {parsed["cap"]} '
+            f'Сорс: {parsed["source"]} Баер: {parsed["buyer"]} - {label}'
+        )
+        offer_data = {
             "name": offer_name,
             "url": url,
-            "affiliate_network_name": parsed["pp"],
-            "geo": [parsed["geo"]],
-            "payout_value": parsed["payout"],
-            "payout_currency": parsed["currency"],
-            "notes": f"Buyer: {parsed['buyer']} | Cap: {parsed['cap']} | Source: {parsed['source']}"
+            "group_id": 1,
+            "campaign_uniqueness": "campaign"
         }
+        try:
+            async with httpx.AsyncClient() as client:
+                res = await client.post(KEITARO_URL, headers=headers, json=offer_data)
+                print(f"=== Keitaro Response [{url}] ===", res.status_code, res.text)
+        except Exception as e:
+            print("=== ERROR while sending to Keitaro ===", str(e))
 
-        headers = {
-            "Api-Key": KEITARO_API_KEY,
-            "Content-Type": "application/json"
-        }
-
-        response = requests.post(
-            KEITARO_API_URL + "offers",
-            json=payload,
-            headers=headers
-        )
-
-        print(f"\n=== Keitaro Response [{url}] ===", response.status_code, response.text)
-
-    return {"status": "completed"}
+    return {"message": "Received"}

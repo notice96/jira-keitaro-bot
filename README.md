@@ -1,3 +1,3 @@
-# Jira to Keitaro Bot
+# Jira to Keitaro
 
-Webhook listener to forward JIRA issues to Keitaro as offers.
+Webhook для отправки задач из Jira в Keitaro.
