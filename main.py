@@ -1,65 +1,73 @@
-from fastapi import FastAPI, Request
-from pydantic import BaseModel
-import httpx
+
 import re
+import httpx
+from fastapi import FastAPI, Request
 
 app = FastAPI()
 
-KEITARO_API_KEY = "0ed98ed7f659004f3f7e68e68984b2fa"
-KEITARO_BASE_URL = "http://77.221.155.15/admin_api/v1"
+API_URL = "http://77.221.155.15/admin_api/v1/offers"
+API_KEY = "0ed98ed7f659004f3f7e68e68984b2fa"
 
-class JiraWebhookPayload(BaseModel):
-    issue: dict
+def parse_offer_data(summary: str, description: str):
+    product = re.search(r"Продукт:\s*(.+)", description)
+    geo = re.search(r"Гео:\s*(.+)", description)
+    payout = re.search(r"Ставка:\s*(.+)", description)
+    cap = re.search(r"Капа:\s*(.+)", description)
+    source = re.search(r"Сорс:\s*(.+)", description)
+    buyer = re.search(r"Баер:\s*(.+)", description)
+    pp = re.search(r"ПП:\s*(.+)", description)
 
-def extract_offer_data(description: str):
-    patterns = {
-        "product": r"Продукт:\s*(.+)",
-        "geo": r"Гео:\s*(.+)",
-        "payout": r"Ставка:\s*(.+)",
-        "currency": r"Валюта:\s*(.+)",
-        "cap": r"Капа:\s*(.+)",
-        "source": r"Сорс:\s*(.+)",
-        "buyer": r"Баер:\s*(.+)",
-        "pp": r"ПП:\s*(.+)",
+    # ссылки
+    links = re.findall(r"(Reg\.Form|Wheel[^\n]*|Crazy[^\n]*|Lightning[^\n]*).*?(https?://[\w\.-/?=&%]+)", description)
+
+    return {
+        "id": summary.strip(),
+        "product": product.group(1).strip() if product else "",
+        "geo": geo.group(1).strip() if geo else "",
+        "payout": payout.group(1).strip() if payout else "",
+        "cap": cap.group(1).strip() if cap else "",
+        "source": source.group(1).strip() if source else "",
+        "buyer": buyer.group(1).strip() if buyer else "",
+        "pp": pp.group(1).strip() if pp else "",
+        "links": links
     }
-    extracted = {}
-    for key, pattern in patterns.items():
-        match = re.search(pattern, description)
-        if match:
-            extracted[key] = match.group(1).strip()
-    return extracted
 
 @app.post("/jira-to-keitaro")
-async def jira_to_keitaro(request: Request):
-    data = await request.json()
-    issue = data.get("issue", {})
-    title = issue.get("fields", {}).get("summary", "")
-    description = issue.get("fields", {}).get("description", "")
-    print("=== JIRA Summary ===", title)
+async def jira_webhook(request: Request):
+    payload = await request.json()
+    summary = payload.get("issue", {}).get("fields", {}).get("summary", "")
+    description = payload.get("issue", {}).get("fields", {}).get("description", "")
+
+    print("=== JIRA Summary ===", summary)
     print("=== JIRA Description ===", description)
 
-    offer_data = extract_offer_data(description)
-    print("=== Parsed Offer Data ===", offer_data)
+    parsed = parse_offer_data(summary, description)
+    print("=== Parsed Offer Data ===", parsed)
 
-    if not offer_data:
-        return {"status": "error", "detail": "No valid data extracted from Jira description"}
-
-    headers = {"Api-Key": KEITARO_API_KEY}
-    payload = {
-        "name": title,
-        "notes": description,
-        "country": offer_data.get("geo", ""),
-        "payout_value": offer_data.get("payout", ""),
-        "currency": offer_data.get("currency", "$"),
-        "status": "active"
+    headers = {
+        "Api-Key": API_KEY,
+        "Content-Type": "application/json"
     }
 
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(f"{KEITARO_BASE_URL}/offers", json=payload, headers=headers)
-            print("=== Keitaro Response ===", response.status_code, response.text)
-            response.raise_for_status()
-            return {"status": "success", "response": response.json()}
-    except Exception as e:
-        print("=== ERROR while sending to Keitaro ===", str(e))
-        return {"status": "error", "detail": str(e)}
+    created = 0
+    for link_title, link_url in parsed["links"]:
+        offer_name = f"{parsed['id']} - {link_title}"
+        notes = description
+
+        data = {
+            "name": offer_name,
+            "url": link_url,
+            "notes": notes,
+            "group_name": parsed["buyer"],
+            "affiliate_network_name": parsed["pp"]
+        }
+
+        try:
+            response = httpx.post(API_URL, headers=headers, json=data, timeout=10)
+            print(f"=== Keitaro Response [{link_title}] ===", response.status_code, response.text)
+            if response.status_code == 200:
+                created += 1
+        except Exception as e:
+            print("=== ERROR while sending to Keitaro ===", str(e))
+
+    return {"status": "completed", "offers_created": created}
