@@ -1,3 +1,1 @@
-# Jira to Keitaro Webhook
-
-This app listens for Jira webhooks and creates offers in Keitaro.
+Jira to Keitaro bot. FastAPI + Railway deploy ready.
