@@ -1,48 +1,15 @@
-
-import re
-import httpx
 from fastapi import FastAPI, Request
+import httpx
+import re
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
-API_URL = "http://77.221.155.15/admin_api/v1/offers"
+KEITARO_API_URL = "http://77.221.155.15/admin_api/v1/offers"
 API_KEY = "0ed98ed7f659004f3f7e68e68984b2fa"
 
-def parse_offer_data(summary: str, description: str):
-    product = re.search(r"Продукт:\s*(.+)", description)
-    geo = re.search(r"Гео:\s*(.+)", description)
-    payout = re.search(r"Ставка:\s*(.+)", description)
-    cap = re.search(r"Капа:\s*(.+)", description)
-    source = re.search(r"Сорс:\s*(.+)", description)
-    buyer = re.search(r"Баер:\s*(.+)", description)
-    pp = re.search(r"ПП:\s*(.+)", description)
-
-    # Поддержка Jira markdown ссылок: [текст|ссылка]
-    markdown_links = re.findall(r"\[(.*?)\|(https?://[\w\.-/?=&%]+)\]", description)
-    # Плюс — прямые обычные ссылки без markdown
-    plain_links = re.findall(r"(https?://[\w\.-/?=&%]+)", description)
-
-    # Преобразуем markdown ссылки в (название, ссылка)
-    links = [(title.strip(), url.strip()) for title, url in markdown_links]
-
-    # Если нет markdown, используем plain ссылки
-    if not links and plain_links:
-        links = [(f"Link {i+1}", url) for i, url in enumerate(plain_links)]
-
-    return {
-        "id": summary.strip(),
-        "product": product.group(1).strip() if product else "",
-        "geo": geo.group(1).strip() if geo else "",
-        "payout": payout.group(1).strip() if payout else "",
-        "cap": cap.group(1).strip() if cap else "",
-        "source": source.group(1).strip() if source else "",
-        "buyer": buyer.group(1).strip() if buyer else "",
-        "pp": pp.group(1).strip() if pp else "",
-        "links": links
-    }
-
 @app.post("/jira-to-keitaro")
-async def jira_webhook(request: Request):
+async def jira_to_keitaro(request: Request):
     payload = await request.json()
     summary = payload.get("issue", {}).get("fields", {}).get("summary", "")
     description = payload.get("issue", {}).get("fields", {}).get("description", "")
@@ -50,33 +17,68 @@ async def jira_webhook(request: Request):
     print("=== JIRA Summary ===", summary)
     print("=== JIRA Description ===", description)
 
-    parsed = parse_offer_data(summary, description)
-    print("=== Parsed Offer Data ===", parsed)
-
-    headers = {
-        "Api-Key": API_KEY,
-        "Content-Type": "application/json"
+    # Извлечение данных
+    data = {
+        "id": extract_value(summary, r"id_prod\{(.*?)\}"),
+        "product": extract_value(description, r"Продукт:\s*(.*)"),
+        "geo": extract_value(description, r"Гео:\s*(.*)"),
+        "payout": extract_value(description, r"Ставка:\s*(.*)"),
+        "currency": extract_value(description, r"Валюта:\s*(.*)"),
+        "cap": extract_value(description, r"Капа:\s*(.*)"),
+        "source": extract_value(description, r"Сорс:\s*(.*)"),
+        "buyer": extract_value(description, r"Баер:\s*(.*)"),
+        "pp": extract_value(description, r"ПП:\s*(.*)"),
+        "links": extract_links(description)
     }
 
-    created = 0
-    for link_title, link_url in parsed["links"]:
-        offer_name = f"{parsed['id']} - {link_title}"
-        notes = description
+    print("=== Parsed Offer Data ===", data)
 
-        data = {
+    results = []
+
+    for label, url in data["links"]:
+        offer_name = (
+            f"id_prod{{{data['id']}}} - Продукт: {data['product']} Гео: {data['geo']} "
+            f"Ставка: {data['payout']} Валюта: {data['currency']} Капа: {data['cap']} "
+            f"Сорс: {data['source']} Баер: {data['buyer']} - {label}"
+        )
+
+        offer_payload = {
             "name": offer_name,
-            "url": link_url,
-            "notes": notes,
-            "group_name": parsed["buyer"],
-            "affiliate_network_name": parsed["pp"]
+            "group": data["buyer"],
+            "affiliate_network": data["pp"],
+            "url": url,
+            "redirect_type": "http",
         }
 
         try:
-            response = httpx.post(API_URL, headers=headers, json=data, timeout=10)
-            print(f"=== Keitaro Response [{link_title}] ===", response.status_code, response.text)
-            if response.status_code == 200:
-                created += 1
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    KEITARO_API_URL,
+                    headers={"Api-Key": API_KEY},
+                    json=offer_payload,
+                    timeout=20
+                )
+                print(f"=== Keitaro Response [{url}] ===", response.status_code, response.text)
+                results.append({
+                    "url": url,
+                    "status_code": response.status_code,
+                    "response": response.text
+                })
         except Exception as e:
-            print("=== ERROR while sending to Keitaro ===", str(e))
+            print(f"=== ERROR sending URL {url} ===", str(e))
+            results.append({
+                "url": url,
+                "error": str(e)
+            })
 
-    return {"status": "completed", "offers_created": created}
+    return JSONResponse(content={"result": results})
+
+def extract_value(text, pattern):
+    match = re.search(pattern, text)
+    return match.group(1).strip() if match else ""
+
+def extract_links(text):
+    pattern = re.compile(r"([^
+]+)
+\[(https?://[^\s|]+)\|")
+    return [(m[0].strip(), m[1].strip()) for m in pattern.findall(text)]
