@@ -1,3 +1,2 @@
-# Final Corrected FastAPI App for Railway
-
-Handles PORT correctly and responds to /.
+# Jira to Keitaro
+Integration example
