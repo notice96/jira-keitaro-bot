@@ -1,3 +1,2 @@
-# Railway FastAPI example
-
-This is a simple FastAPI project for Railway deployment.
+# Railway FastAPI App
+Deployed via Railway with corrected Procfile.
