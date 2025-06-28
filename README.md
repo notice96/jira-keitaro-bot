@@ -1,3 +1,3 @@
-# Jira to Keitaro
+# Jira to Keitaro Webhook
 
-Webhook для отправки задач из Jira в Keitaro.
+This app listens for Jira webhooks and creates offers in Keitaro.
