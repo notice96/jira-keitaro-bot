@@ -1,84 +1,75 @@
-
 import os
-import requests
+import re
+import logging
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+import httpx
 
 app = FastAPI()
 
-KEITARO_API_KEY = os.getenv("KEITARO_API_KEY")
 KEITARO_API_URL = os.getenv("KEITARO_API_URL")
+KEITARO_API_KEY = os.getenv("KEITARO_API_KEY")
+
+def extract_links_and_labels(description_text: str):
+    lines = description_text.splitlines()
+    links = []
+    current_label = None
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("http"):
+            label = current_label if current_label else "No Label"
+            links.append((label, line))
+        else:
+            current_label = line
+    return links
+
+def parse_offer(description: str):
+    offer = {}
+    offer["id"] = re.search(r"id_prod{(.*?)}", description).group(0)
+    fields = ["Продукт", "Гео", "Ставка", "Валюта", "Капа", "Сорс", "Баер", "ПП"]
+    for field in fields:
+        match = re.search(rf"{field}:\s*(.*)", description)
+        if match:
+            offer[field.lower()] = match.group(1).strip()
+    offer["links"] = extract_links_and_labels(description)
+    return offer
 
 @app.post("/jira-to-keitaro")
 async def webhook(request: Request):
-    data = await request.json()
+    payload = await request.json()
+    try:
+        description = payload.get("issue", {}).get("fields", {}).get("description", {}).get("content", [])
+        full_text = ""
 
-    description = data.get("issue", {}).get("fields", {}).get("description", "")
-    if isinstance(description, dict):
-        description_blocks = description.get("content", [])
-        description_text = ""
-        for block in description_blocks:
-            for inner in block.get("content", []):
-                description_text += inner.get("text", "") + "\n"
-    else:
-        description_text = description
+        for block in description:
+            for content in block.get("content", []):
+                if "text" in content:
+                    full_text += content["text"] + "\n"
+                elif content.get("type") == "inlineCard":
+                    url = content.get("attrs", {}).get("url")
+                    if url:
+                        full_text += url + "\n"
 
-    print("\n=== Parsed Description Text ===\n", description_text)
+        print("\n=== Parsed Description Text ===\n", full_text)
+        offer = parse_offer(full_text)
+        print("\n=== Parsed Offer Data ===", offer)
 
-    lines = [line.strip() for line in description_text.strip().splitlines() if line.strip()]
-    offer_data = {
-        "id": "",
-        "product": "",
-        "geo": "",
-        "payout": "",
-        "currency": "",
-        "cap": "",
-        "source": "",
-        "buyer": "",
-        "pp": "",
-        "links": []
-    }
+        headers = {"Api-Key": KEITARO_API_KEY, "Content-Type": "application/json"}
+        for label, link in offer["links"]:
+            data = {
+                "name": f"{offer['id']} - {offer.get('продукт')} Гео: {offer.get('гео')} Ставка: {offer.get('ставка')} Валюта: {offer.get('валюта')} Капа: {offer.get('капа')} Сорс: {offer.get('сорс')} Баер: {offer.get('баер')} - {label}",
+                "url": link,
+                "group_id": 1,
+                "type": "redirect",
+                "status": "active"
+            }
+            async with httpx.AsyncClient() as client:
+                r = await client.post(f"{KEITARO_API_URL}/offers", headers=headers, json=data)
+                print("Keitaro response:", r.status_code, r.text)
 
-    for i, line in enumerate(lines):
-        if line.startswith("id_prod"):
-            offer_data["id"] = line
-        elif line.lower().startswith("продукт:"):
-            offer_data["product"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("гео:"):
-            offer_data["geo"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("ставка:"):
-            offer_data["payout"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("валюта:"):
-            offer_data["currency"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("капа:"):
-            offer_data["cap"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("сорс:"):
-            offer_data["source"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("баер:"):
-            offer_data["buyer"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("пп:"):
-            offer_data["pp"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("http"):
-            offer_data["links"].append({
-                "title": lines[i - 1] if i > 0 else "Offer Link",
-                "url": line
-            })
-
-    print("\n=== Parsed Offer Data ===", offer_data)
-
-    headers = {
-        "Api-Key": KEITARO_API_KEY,
-        "Content-Type": "application/json"
-    }
-
-    for link in offer_data["links"]:
-        name = f"{offer_data['id']} - Продукт: {offer_data['product']} Гео: {offer_data['geo']} Ставка: {offer_data['payout']} Валюта: {offer_data['currency']} Капа: {offer_data['cap']} Сорс: {offer_data['source']} Баер: {offer_data['buyer']} - {link['title']}"
-        payload = {
-            "name": name,
-            "url": link["url"],
-            "group": offer_data["pp"]
-        }
-        response = requests.post(f"{KEITARO_API_URL}/offers", json=payload, headers=headers)
-        print(f"== Keitaro API response ({name}):", response.status_code, response.text)
-
-    return JSONResponse(content={"status": "success"})
+        return {"status": "ok"}
+    except Exception as e:
+        logging.exception("Error processing webhook")
+        return {"error": str(e)}
