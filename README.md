@@ -1,3 +1,3 @@
-# Final Railway FastAPI Project
+# FastAPI App for Offer Generation
 
-Correct port handling, ready for deploy.
+Simple API to generate offers from user input.

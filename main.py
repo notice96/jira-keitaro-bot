@@ -1,13 +1,20 @@
-from fastapi import FastAPI
-import os
-import uvicorn
+
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 
 app = FastAPI()
 
-@app.get("/")
-def read_root():
-    return {"message": "Hello from Railway!"}
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    return "<h1>Server is up and running.</h1>"
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+@app.post("/generate_offer")
+async def generate_offer(request: Request):
+    data = await request.json()
+    input_text = data.get("text", "")
+    if not input_text:
+        return {"error": "No input text provided."}
+    
+    # Имитация генерации оффера
+    offer = f"🎯 {input_text[:80]}... — Специальное предложение уже ждет вас!"
+    return {"offer": offer}
