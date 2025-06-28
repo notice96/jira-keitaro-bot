@@ -56,7 +56,7 @@ def parse_offer(summary, description):
 async def webhook(request: Request):
     data = await request.json()
     summary = data.get("issue", {}).get("fields", {}).get("summary", "")
-    description_blocks = data.get("issue", {}).get("fields", {}).get("description", {}).get("content", [])
+    description = data.get("issue", {}).get("fields", {}).get("description", "")
 
     desc_text = ""
     for block in description_blocks:
