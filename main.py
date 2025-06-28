@@ -61,7 +61,7 @@ async def webhook(request: Request):
 
     desc_text = ""
     for block in description:
-        for inner in block.get("content", []):
+        continue  # patched: skip
             desc_text += inner.get("text", "") + "\n"
 
     parsed = parse_offer(summary, desc_text)
