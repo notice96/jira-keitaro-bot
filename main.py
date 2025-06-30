@@ -1,11 +1,15 @@
-from fastapi import FastAPI
+
+import os
+from fastapi import FastAPI, Request
 
 app = FastAPI()
 
 @app.get("/")
-def root():
-    return {"message": "FastAPI is working"}
+def read_root():
+    return {"message": "Server is running."}
 
 @app.post("/jira-to-keitaro")
-def test():
+async def jira_to_keitaro(request: Request):
+    data = await request.json()
+    print("Received JIRA Webhook:", data)
     return {"status": "received"}
