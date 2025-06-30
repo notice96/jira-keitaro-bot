@@ -1,82 +1,86 @@
-
 from fastapi import FastAPI, Request
 import requests
 import os
 
 app = FastAPI()
 
-@app.get("/")
-async def root():
-    return {"message": "Server is running."}
+KEITARO_API_URL = os.getenv("KEITARO_API_URL")
+KEITARO_API_KEY = os.getenv("KEITARO_API_KEY")
 
 @app.post("/jira-to-keitaro")
-async def jira_to_keitaro(request: Request):
+async def webhook(request: Request):
     data = await request.json()
-    issue = data.get("issue", {})
-    fields = issue.get("fields", {})
-    description = fields.get("description", "")
-    if not description:
-        return {"error": "No description found."}
 
+    # Получаем описание как строку
+    description = data.get("issue", {}).get("fields", {}).get("description", "")
     lines = description.splitlines()
-    base_fields = {
-        "id": "", "product": "", "geo": "", "payout": "", "currency": "",
-        "cap": "", "source": "", "buyer": "", "pp": ""
-    }
-    offer_links = []
-    current_label = None
 
+    # Парсим строки
+    offer_data = {
+        "id": "",
+        "product": "",
+        "geo": "",
+        "payout": "",
+        "currency": "",
+        "cap": "",
+        "source": "",
+        "buyer": "",
+        "pp": "",
+        "links": []
+    }
+
+    current_link_name = ""
     for line in lines:
         line = line.strip()
-        if not line:
-            continue
         if line.startswith("id_prod"):
-            base_fields["id"] = line.strip()
-        elif line.startswith("Продукт:"):
-            base_fields["product"] = line.replace("Продукт:", "").strip()
-        elif line.startswith("Гео:"):
-            base_fields["geo"] = line.replace("Гео:", "").strip()
-        elif line.startswith("Ставка:"):
-            base_fields["payout"] = line.replace("Ставка:", "").strip()
-        elif line.startswith("Валюта:"):
-            base_fields["currency"] = line.replace("Валюта:", "").strip()
-        elif line.startswith("Капа:"):
-            base_fields["cap"] = line.replace("Капа:", "").strip()
-        elif line.startswith("Сорс:"):
-            base_fields["source"] = line.replace("Сорс:", "").strip()
-        elif line.startswith("Баер:"):
-            base_fields["buyer"] = line.replace("Баер:", "").strip()
-        elif line.startswith("ПП:"):
-            base_fields["pp"] = line.replace("ПП:", "").strip()
+            offer_data["id"] = line
+        elif line.lower().startswith("продукт:"):
+            offer_data["product"] = line.split(":", 1)[1].strip()
+        elif line.lower().startswith("гео:"):
+            offer_data["geo"] = line.split(":", 1)[1].strip()
+        elif line.lower().startswith("ставка:"):
+            offer_data["payout"] = line.split(":", 1)[1].strip()
+        elif line.lower().startswith("валюта:"):
+            offer_data["currency"] = line.split(":", 1)[1].strip()
+        elif line.lower().startswith("капа:"):
+            offer_data["cap"] = line.split(":", 1)[1].strip()
+        elif line.lower().startswith("сорс:"):
+            offer_data["source"] = line.split(":", 1)[1].strip()
+        elif line.lower().startswith("баер:"):
+            offer_data["buyer"] = line.split(":", 1)[1].strip()
+        elif line.lower().startswith("пп:"):
+            offer_data["pp"] = line.split(":", 1)[1].strip()
         elif line.startswith("http"):
-            offer_links.append((current_label or "Link"), line)
-        else:
-            current_label = line
+            if current_link_name:
+                offer_data["links"].append((current_link_name, line))
+                current_link_name = ""
+        elif line != "":
+            current_link_name = line
 
-    created_offers = []
+    print("
+=== Parsed Offer Data ===", offer_data)
 
-    for label, link in offer_links:
-        offer_name = f"{base_fields['id']} - Продукт: {base_fields['product']} Гео: {base_fields['geo']} Ставка: {base_fields['payout']} Валюта: {base_fields['currency']} Капа: {base_fields['cap']} Сорс: {base_fields['source']} Баер: {base_fields['buyer']} - {label}"
+    # Отправляем офферы в Keitaro
+    headers = {
+        "Api-Key": KEITARO_API_KEY,
+        "Content-Type": "application/json"
+    }
+
+    for link_name, link_url in offer_data["links"]:
+        campaign_name = f'{offer_data["id"]} - Продукт: {offer_data["product"]} Гео: {offer_data["geo"]} Ставка: {offer_data["payout"]} Валюта: {offer_data["currency"]} Капа: {offer_data["cap"]} Сорс: {offer_data["source"]} Баер: {offer_data["buyer"]} - {link_name}'
         payload = {
-            "name": offer_name,
-            "country": [base_fields["geo"]],
-            "affiliate_network": base_fields["pp"],
-            "payout_value": float(base_fields["payout"]) if base_fields["payout"] else 0,
-            "payout_currency": base_fields["currency"],
-            "notes": f"Источник: {base_fields['source']}, Баер: {base_fields['buyer']}",
-            "action_type": "http",
-            "offer_type": "external",
-            "state": "active",
-            "action_payload": link
+            "name": campaign_name,
+            "traffic_source_id": 1,
+            "cost_value": offer_data["payout"],
+            "cost_model": "CPA",
+            "redirects": [{"url": link_url}]
         }
+        try:
+            response = requests.post(f"{KEITARO_API_URL}/campaigns", json=payload, headers=headers)
+            print(f"
+Keitaro API response: {response.status_code} {response.text}")
+        except Exception as e:
+            print(f"
+Keitaro API exception: {str(e)}")
 
-        headers = {
-            "API-KEY": os.environ["KEITARO_API_KEY"],
-            "Content-Type": "application/json"
-        }
-
-        keitaro_url = os.environ["KEITARO_API_URL"]
-        response = requests.post(f"{keitaro_url}/admin_api/v1/offers", headers=headers, json=payload)
-        created_offers.append({"name": offer_name, "status": response.status_code, "response": response.text})
-
-    return {"created": created_offers}
+    return {"status": "done"}
