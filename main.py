@@ -1,54 +1,76 @@
-from fastapi import FastAPI, Request
+
 import os
-import requests
-import re
+import json
+import httpx
+from fastapi import FastAPI, Request
 
 app = FastAPI()
 
-def extract_links(description: str):
-    # Сначала парсим markdown-ссылки [url|url]
-    matches = re.findall(r'\[(https?://[^|\]]+)\|https?://[^\]]+\]', description)
-    if not matches:
-        # Затем парсим обычные ссылки
-        matches = re.findall(r'https?://[^\s\]]+', description)
-    return matches
+KEITARO_API_KEY = os.getenv("KEITARO_API_KEY")
+KEITARO_URL = os.getenv("KEITARO_URL")
 
-def parse_description(text: str):
-    data = {}
-    lines = text.splitlines()
-    for line in lines:
-        if "id_prod" in line:
-            data["id"] = line.strip()
-        elif line.lower().startswith("продукт:"):
-            data["product"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("гео:"):
-            data["geo"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("ставка:"):
-            data["payout"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("валюта:"):
-            data["currency"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("капа:"):
-            data["cap"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("сорс:"):
-            data["source"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("баер:"):
-            data["buyer"] = line.split(":", 1)[1].strip()
-        elif line.lower().startswith("пп:"):
-            data["pp"] = line.split(":", 1)[1].strip()
+def extract_offer_blocks(description):
+    lines = description.splitlines()
+    title_line = lines[0]
+    attributes = {
+        "id": title_line.strip(),
+        "product": "", "geo": "", "payout": "", "currency": "",
+        "cap": "", "source": "", "buyer": "", "pp": "", "links": []
+    }
 
-    data["links"] = extract_links(text)
-    print("\n=== Parsed Offer Data ===", data)
-    return data
+    current_label = None
+    for line in lines[1:]:
+        line = line.strip()
+        if not line:
+            continue
+        if any(line.startswith(label) for label in ["Продукт:", "Гео:", "Ставка:", "Валюта:", "Капа:", "Сорс:", "Баер:", "ПП:"]):
+            key, value = line.split(":", 1)
+            attributes[key.lower().strip()] = value.strip()
+        elif line.startswith("http") or "http" in line:
+            if "](" in line or "|" in line:
+                parts = line.split("|")
+                if len(parts) == 2:
+                    attributes["links"].append((current_label or "NoName", parts[1].strip("]")))
+            else:
+                attributes["links"].append((current_label or "NoName", line.strip()))
+        else:
+            current_label = line.strip()
+
+    return attributes
 
 @app.post("/jira-to-keitaro")
-async def webhook(request: Request):
-    body = await request.json()
-    print("\n=== Raw Webhook Data ===\n", body)
-    try:
-        description = body["issue"]["fields"]["description"]
-        print("\n=== Parsed Description Text ===\n", description)
-        offer_data = parse_description(description)
-        # можно добавить push в keitaro здесь
-    except Exception as e:
-        print(f"Error: {e}")
-    return {"ok": True}
+async def jira_webhook(request: Request):
+    payload = await request.json()
+    issue = payload.get("issue", {})
+    fields = issue.get("fields", {})
+    description = fields.get("description", "")
+    if not description:
+        return {"error": "No description"}
+
+    offer_data = extract_offer_blocks(description)
+    responses = []
+
+    for label, link in offer_data["links"]:
+        offer_name = f"{offer_data['id']} - Продукт: {offer_data.get('продукт')} Гео: {offer_data.get('гео')} Ставка: {offer_data.get('ставка')} Валюта: {offer_data.get('валюта')} Капа: {offer_data.get('капа')} Сорс: {offer_data.get('сорс')} Баер: {offer_data.get('баер')} - {label}"
+        country_code = offer_data.get("гео")
+        data = {
+            "name": offer_name,
+            "action_payload": link,
+            "country": [country_code] if country_code else [],
+            "notes": f"PP: {offer_data.get('пп', '')}",
+            "offer_type": "external",
+            "action_type": "http"
+        }
+
+        headers = {
+            "API-KEY": KEITARO_API_KEY,
+            "Content-Type": "application/json"
+        }
+
+        try:
+            r = httpx.post(f"{KEITARO_URL}/admin_api/v1/offers", headers=headers, json=data, timeout=10)
+            responses.append({"status": r.status_code, "body": r.text})
+        except Exception as e:
+            responses.append({"error": str(e)})
+
+    return {"results": responses}
