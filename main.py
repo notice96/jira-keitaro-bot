@@ -6,7 +6,7 @@ import os
 
 app = FastAPI()
 
-KEITARO_API_KEY = "0ed98ed7f659004f3f7e68e68984b2fa"
+KEITARO_API_KEY = "068bed180d49ede6d342a4e9d09cdeba"
 KEITARO_BASE_URL = "https://keitaro_url_goes_here/admin_api/v1"
 
 class JiraWebhookPayload(BaseModel):
