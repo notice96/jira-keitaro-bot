@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Request
 import requests
 import os
-import re
 
 app = FastAPI()
 
@@ -12,59 +11,66 @@ async def root():
 @app.post("/jira-to-keitaro")
 async def jira_to_keitaro(request: Request):
     data = await request.json()
+
     description = data.get("issue", {}).get("fields", {}).get("description", "")
     if not description:
-        return {"error": "No description found in the issue"}
+        return {"error": "No description found."}
 
-    offer_id_match = re.search(r"id_prod\{(\d+)\}", description)
-    product_match = re.search(r"Продукт:\s*(.*)", description)
-    geo_match = re.search(r"Гео:\s*(.*)", description)
-    payout_match = re.search(r"Ставка:\s*(.*)", description)
-    currency_match = re.search(r"Валюта:\s*(.*)", description)
-    cap_match = re.search(r"Капа:\s*(.*)", description)
-    source_match = re.search(r"Сорс:\s*(.*)", description)
-    buyer_match = re.search(r"Баер:\s*(.*)", description)
-    network_match = re.search(r"ПП:\s*(.*)", description)
-    links = re.findall(r"(https?://[^\s]+)", description)
+    # Разбор ID
+    import re
+    match = re.search(r"id_prod\{(\d+)}", description)
+    offer_id = match.group(1) if match else "000"
 
-    if not (offer_id_match and product_match and geo_match and payout_match and currency_match and links):
-        return {"error": "Missing required fields in description"}
+    # Парсинг данных
+    def extract_value(label):
+        match = re.search(rf"{label}:\s*(.+)", description)
+        return match.group(1).strip() if match else ""
 
-    offer_id = offer_id_match.group(1)
-    product = product_match.group(1).strip()
-    geo = geo_match.group(1).strip()
-    payout = float(payout_match.group(1).strip())
-    currency = currency_match.group(1).strip()
-    cap = cap_match.group(1).strip() if cap_match else ""
-    source = source_match.group(1).strip() if source_match else ""
-    buyer = buyer_match.group(1).strip() if buyer_match else ""
-    network = network_match.group(1).strip() if network_match else ""
+    product = extract_value("Продукт")
+    geo = extract_value("Гео")
+    payout = extract_value("Ставка")
+    currency = extract_value("Валюта")
+    cap = extract_value("Капа")
+    source = extract_value("Сорс")
+    buyer = extract_value("Баер")
+    network = extract_value("ПП")
 
-    results = []
+    # Все ссылки
+    links = re.findall(r'(https?://[^\s]+)', description)
+    offers = []
+
     for link in links:
-        prefix_match = re.search(r"https?://[^\s]+\n(.*)", description)
-        prefix = prefix_match.group(1).strip() if prefix_match else ""
-        name = f"id_prod{{{offer_id}}} - Продукт: {product} Гео: {geo} Ставка: {payout} Валюта: {currency} Капа: {cap} Сорс: {source} Баер: {buyer} - {prefix}"
+        # Название из текста до ссылки
+        name_match = re.search(r'([^\n]+)\n%s' % re.escape(link), description)
+        suffix = name_match.group(1).strip() if name_match else ""
 
-        payload = {
-            "name": name,
-            "affiliate_network": network,
+        offer_name = f"id_prod{{{offer_id}}} - Продукт: {product} Гео: {geo} Ставка: {payout} Валюта: {currency} Капа: {cap} Сорс: {source} Баер: {buyer} - {suffix}"
+
+        offer_payload = {
+            "name": offer_name,
+            "country": [geo],
+            "payout_value": float(payout),
+            "payout_currency": currency,
+            "payout_type": "",
+            "state": "active",
+            "payout_auto": False,
+            "payout_upsell": False,
+            "notes": "",
             "action_type": "http",
             "action_payload": link,
-            "payout_value": payout,
-            "payout_currency": currency,
-            "payout_type": "fixed",
-            "country": [geo],
-            "state": "active",
             "offer_type": "external",
+            "affiliate_network": network
         }
 
+        keitaro_url = os.getenv("KEITARO_API_URL")
+        keitaro_key = os.getenv("KEITARO_API_KEY")
+
         headers = {
-            "API-KEY": os.getenv("KEITARO_API_KEY"),
+            "API-KEY": keitaro_key,
             "Content-Type": "application/json"
         }
 
-        response = requests.post(os.getenv("KEITARO_API_URL"), json=payload, headers=headers)
-        results.append(response.json())
+        response = requests.post(keitaro_url, json=offer_payload, headers=headers)
+        offers.append(response.json())
 
-    return {"status": "done", "results": results}
+    return {"status": "created", "offers": offers}
