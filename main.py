@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI, Request
 import requests
 import os
@@ -11,66 +12,71 @@ async def root():
 @app.post("/jira-to-keitaro")
 async def jira_to_keitaro(request: Request):
     data = await request.json()
-
-    description = data.get("issue", {}).get("fields", {}).get("description", "")
+    issue = data.get("issue", {})
+    fields = issue.get("fields", {})
+    description = fields.get("description", "")
     if not description:
         return {"error": "No description found."}
 
-    # Разбор ID
-    import re
-    match = re.search(r"id_prod\{(\d+)}", description)
-    offer_id = match.group(1) if match else "000"
+    lines = description.splitlines()
+    base_fields = {
+        "id": "", "product": "", "geo": "", "payout": "", "currency": "",
+        "cap": "", "source": "", "buyer": "", "pp": ""
+    }
+    offer_links = []
+    current_label = None
 
-    # Парсинг данных
-    def extract_value(label):
-        match = re.search(rf"{label}:\s*(.+)", description)
-        return match.group(1).strip() if match else ""
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("id_prod"):
+            base_fields["id"] = line.strip()
+        elif line.startswith("Продукт:"):
+            base_fields["product"] = line.replace("Продукт:", "").strip()
+        elif line.startswith("Гео:"):
+            base_fields["geo"] = line.replace("Гео:", "").strip()
+        elif line.startswith("Ставка:"):
+            base_fields["payout"] = line.replace("Ставка:", "").strip()
+        elif line.startswith("Валюта:"):
+            base_fields["currency"] = line.replace("Валюта:", "").strip()
+        elif line.startswith("Капа:"):
+            base_fields["cap"] = line.replace("Капа:", "").strip()
+        elif line.startswith("Сорс:"):
+            base_fields["source"] = line.replace("Сорс:", "").strip()
+        elif line.startswith("Баер:"):
+            base_fields["buyer"] = line.replace("Баер:", "").strip()
+        elif line.startswith("ПП:"):
+            base_fields["pp"] = line.replace("ПП:", "").strip()
+        elif line.startswith("http"):
+            offer_links.append((current_label or "Link"), line)
+        else:
+            current_label = line
 
-    product = extract_value("Продукт")
-    geo = extract_value("Гео")
-    payout = extract_value("Ставка")
-    currency = extract_value("Валюта")
-    cap = extract_value("Капа")
-    source = extract_value("Сорс")
-    buyer = extract_value("Баер")
-    network = extract_value("ПП")
+    created_offers = []
 
-    # Все ссылки
-    links = re.findall(r'(https?://[^\s]+)', description)
-    offers = []
-
-    for link in links:
-        # Название из текста до ссылки
-        name_match = re.search(r'([^\n]+)\n%s' % re.escape(link), description)
-        suffix = name_match.group(1).strip() if name_match else ""
-
-        offer_name = f"id_prod{{{offer_id}}} - Продукт: {product} Гео: {geo} Ставка: {payout} Валюта: {currency} Капа: {cap} Сорс: {source} Баер: {buyer} - {suffix}"
-
-        offer_payload = {
+    for label, link in offer_links:
+        offer_name = f"{base_fields['id']} - Продукт: {base_fields['product']} Гео: {base_fields['geo']} Ставка: {base_fields['payout']} Валюта: {base_fields['currency']} Капа: {base_fields['cap']} Сорс: {base_fields['source']} Баер: {base_fields['buyer']} - {label}"
+        payload = {
             "name": offer_name,
-            "country": [geo],
-            "payout_value": float(payout),
-            "payout_currency": currency,
-            "payout_type": "",
-            "state": "active",
-            "payout_auto": False,
-            "payout_upsell": False,
-            "notes": "",
+            "country": [base_fields["geo"]],
+            "affiliate_network": base_fields["pp"],
+            "payout_value": float(base_fields["payout"]) if base_fields["payout"] else 0,
+            "payout_currency": base_fields["currency"],
+            "notes": f"Источник: {base_fields['source']}, Баер: {base_fields['buyer']}",
             "action_type": "http",
-            "action_payload": link,
             "offer_type": "external",
-            "affiliate_network": network
+            "state": "active",
+            "action_payload": link
         }
 
-        keitaro_url = os.getenv("KEITARO_API_URL")
-        keitaro_key = os.getenv("KEITARO_API_KEY")
-
         headers = {
-            "API-KEY": keitaro_key,
+            "API-KEY": os.environ["KEITARO_API_KEY"],
             "Content-Type": "application/json"
         }
 
-        response = requests.post(keitaro_url, json=offer_payload, headers=headers)
-        offers.append(response.json())
+        keitaro_url = os.environ["KEITARO_API_URL"]
+        response = requests.post(f"{keitaro_url}/admin_api/v1/offers", headers=headers, json=payload)
+        created_offers.append({"name": offer_name, "status": response.status_code, "response": response.text})
 
-    return {"status": "created", "offers": offers}
+    return {"created": created_offers}
