@@ -62,7 +62,7 @@ def convert_country(geo):
 
 
 async def create_keitaro_offer(offer_data):
-    url = f"{KEITARO_BASE_URL}/offers"
+    url = KEITARO_BASE_URL
     headers = {
         "API-KEY": KEITARO_API_KEY,
         "Content-Type": "application/json"
