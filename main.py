@@ -1,8 +1,7 @@
 import os
-import json
 import re
-import httpx
 from fastapi import FastAPI, Request
+import httpx
 
 app = FastAPI()
 
@@ -10,76 +9,38 @@ KEITARO_API_KEY = os.getenv("KEITARO_API_KEY")
 KEITARO_BASE_URL = os.getenv("KEITARO_BASE_URL")
 
 
-@app.get("/")
-async def root():
-    return {"message": "Server is running."}
+def convert_country(geo):
+    iso_map = {
+        "PK": "Pakistan",
+        "IN": "India",
+        "ID": "Indonesia",
+        "VN": "Vietnam",
+        "BD": "Bangladesh"
+    }
+    return iso_map.get(geo.upper(), geo)
 
 
-@app.post("/jira-to-keitaro")
-async def jira_to_keitaro(request: Request):
-    body = await request.json()
-    issue = body.get("issue", {})
-    description = issue.get("fields", {}).get("description", "")
-    parsed_data = parse_offer_description(description)
-
-    if not parsed_data:
-        return {"message": "No valid offer data found in Jira issue."}
-
-    created_offers = []
-    for offer in parsed_data:
-        response = await create_keitaro_offer(offer)
-        created_offers.append(response)
-
-    return {"message": "Offers processed.", "results": created_offers}
+def extract_offers_from_description(description):
+    pattern = re.compile(r"(?P<name>.+?)\n(?P<url>https?://[\w\-._~:/?#\[\]@!$&'()*+,;=%]+)", re.MULTILINE)
+    return pattern.findall(description)
 
 
-def parse_offer_description(text):
-    pattern = (
-        r"id_prod\{(?P<id>\d+)}.*?Продукт:\s*(?P<product>.+?)\n"
-        r"Гео:\s*(?P<geo>.+?)\nСтавка:\s*(?P<payout>.+?)\n"
-        r"Валюта:\s*(?P<currency>.+?)\nКапа:\s*(?P<cap>.+?)\n"
-        r"Сорс:\s*(?P<source>.+?)\nБаер:\s*(?P<buyer>.+?)\nПП:\s*(?P<pp>.+?)\n"
-        r"(?P<links_text>(?:.*?https?://[^\s\]]+)+)"
+def parse_task_description(description):
+    pattern = re.compile(
+        r"id_prod\{(?P<id>\d+)} - Продукт:\s*(?P<product>.*?)\s*Гео:\s*(?P<geo>\w{2})\s*Ставка:\s*(?P<payout>\d+(\.\d+)?)\s*Валюта:\s*(?P<currency>\$|€|₽|USD|EUR|RUB)\s*Капа:\s*(?P<cap>\d+).*?Сорс:\s*(?P<source>.*?)\s*Баер:\s*(?P<buyer>@\w+)",
+        re.DOTALL
     )
-
-    match = re.search(pattern, text, re.DOTALL)
+    match = pattern.search(description)
     if not match:
-        return []
+        return None, []
 
     groups = match.groupdict()
-    links_section = groups["links_text"]
-    link_matches = re.findall(r"([^\n]+)\n(https?://[^\s]+)", links_section)
-
-    offers = []
-    for label, url in link_matches:
-        offer = {
-            "name": f"id_prod{{{groups['id']}}} - Продукт: {groups['product']} Гео: {groups['geo']} "
-                    f"Ставка: {groups['payout']} Валюта: {groups['currency']} Капа: {groups['cap']} "
-                    f"Сорс: {groups['source']} Баер: {groups['buyer']} - {label.strip()}",
-            "action_payload": url.strip(),
-            "country": [groups['geo'].strip()],
-            "notes": "",
-            "action_type": "http",
-            "offer_type": "external",
-            "conversion_cap_enabled": False,
-            "daily_cap": 0,
-            "conversion_timezone": "UTC",
-            "alternative_offer_id": 0,
-            "values": "",
-            "payout_value": float(groups["payout"]),
-            "payout_currency": groups["currency"].strip(),
-            "payout_type": "",
-            "payout_auto": False,
-            "payout_upsell": False,
-            "affiliate_network_id": 0
-        }
-        offers.append(offer)
-
-    return offers
+    offers = extract_offers_from_description(description)
+    return groups, offers
 
 
 async def create_keitaro_offer(offer_data):
-    url = KEITARO_BASE_URL
+    url = f"{KEITARO_BASE_URL}/offers"
     headers = {
         "API-KEY": KEITARO_API_KEY,
         "Content-Type": "application/json"
@@ -87,7 +48,35 @@ async def create_keitaro_offer(offer_data):
 
     async with httpx.AsyncClient() as client:
         response = await client.post(url, headers=headers, json=offer_data)
-        return {
-            "status_code": response.status_code,
-            "response": response.text
+        response.raise_for_status()
+        return response.json()
+
+
+@app.post("/jira-to-keitaro")
+async def jira_to_keitaro(request: Request):
+    payload = await request.json()
+    description = payload.get("issue", {}).get("fields", {}).get("description", "")
+    groups, offers = parse_task_description(description)
+
+    if not groups or not offers:
+        return {"error": "Invalid task format or no offers found"}
+
+    results = []
+
+    for name, url in offers:
+        offer_data = {
+            "name": f"id_prod{{{groups['id']}}} - Продукт: {groups['product']} Гео: {groups['geo']} Ставка: {groups['payout']} Валюта: {groups['currency']} Капа: {groups['cap']} Сорс: {groups['source']} Баер: {groups['buyer']} - {name}",
+            "action_type": "http",
+            "action_payload": url,
+            "offer_type": "external",
+            "country": [convert_country(groups["geo"].strip())],
+            "state": "active"
         }
+
+        try:
+            result = await create_keitaro_offer(offer_data)
+            results.append(result)
+        except Exception as e:
+            results.append({"error": str(e)})
+
+    return {"results": results}
