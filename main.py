@@ -34,7 +34,7 @@ async def jira_to_keitaro(request: Request):
 
 def parse_offer_description(text):
     pattern = (
-        r"id_prod\{(?P<id>\d+)},*?Продукт:\s*(?P<product>.+?)\n" 
+        r"id_prod\{(?P<id>\d+)}.*?Продукт:\s*(?P<product>.+?)\n" 
         r"Гео:\s*(?P<geo>.+?)\nСтавка:\s*(?P<payout>.+?)\n" 
         r"Валюта:\s*(?P<currency>.+?)\nКапа:\s*(?P<cap>.+?)\n"
         r"Сорс:\s*(?P<source>.+?)\nБаер:\s(?P<buyer>.+?)\nПП:(?P<pp>.+?)\n"
