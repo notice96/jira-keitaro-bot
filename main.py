@@ -34,11 +34,11 @@ async def jira_to_keitaro(request: Request):
 
 def parse_offer_description(text):
     pattern = (
-        r"id_prod\{(?P<id>\d+)},*?Продукт:\s*(?P<product>,+?)\n" 
-        r"Гео:\s*(?P<geo>,+?)\nСтавка:\s*(?P<payout>,+?)\n" 
-        r"Валюта:\s*(?P<currency>,+?)\nКапа:\s*(?P<cap>,+?)\n"
-        r"Сорс:\s*(?P<source>,+?)\nБаер:\s(?P<buyer>,+?)\nПП:(?P<pp>,+?)\n"
-        r"(?P<links_text>(?:,*?https?://[^\s\]]+)+)"
+        r"id_prod\{(?P<id>\d+)},*?Продукт:\s*(?P<product>.+?)\n" 
+        r"Гео:\s*(?P<geo>.+?)\nСтавка:\s*(?P<payout>.+?)\n" 
+        r"Валюта:\s*(?P<currency>.+?)\nКапа:\s*(?P<cap>.+?)\n"
+        r"Сорс:\s*(?P<source>.+?)\nБаер:\s(?P<buyer>.+?)\nПП:(?P<pp>.+?)\n"
+        r"(?P<links_text>(?:.*?https?://[^\s\]]+)+)"
     )
 
     match = re.search(pattern, text, re.DOTALL)
@@ -47,7 +47,7 @@ def parse_offer_description(text):
 
     groups = match.groupdict()
     links_section = groups["links_text"]
-    link_matches = re.findall(r"(.*?)\n\n(https?://[^\]]+)", links_section)
+    link_matches = re.findall(r"(.*?)\n\[(https?://[^\]]+)]", links_section)
 
     offers = []
     for label, url in link_matches:
