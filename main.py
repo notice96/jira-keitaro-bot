@@ -1,76 +1,81 @@
-
 import os
-import json
-import httpx
+import logging
 from fastapi import FastAPI, Request
+import requests
 
 app = FastAPI()
+logging.basicConfig(level=logging.INFO)
 
-KEITARO_API_KEY = os.getenv("KEITARO_API_KEY")
-KEITARO_URL = os.getenv("KEITARO_URL")
+API_URL = os.getenv("API_URL")
+API_KEY = os.getenv("API_KEY")
 
-def extract_offer_blocks(description):
+@app.post("/")
+async def handle_webhook(request: Request):
+    data = await request.json()
+    logging.info(f"Received data: {data}")
+
+    description = data.get("issue", {}).get("fields", {}).get("description", "")
+    if not description:
+        logging.warning("No description found.")
+        return {"status": "no description"}
+
     lines = description.splitlines()
-    title_line = lines[0]
-    attributes = {
-        "id": title_line.strip(),
-        "product": "", "geo": "", "payout": "", "currency": "",
-        "cap": "", "source": "", "buyer": "", "pp": "", "links": []
-    }
+    base_name = None
+    product = geo = payout = currency = cap = source = buyer = pp = ""
+    links = []
+    current_label = ""
 
-    current_label = None
-    for line in lines[1:]:
+    for line in lines:
         line = line.strip()
         if not line:
             continue
-        if any(line.startswith(label) for label in ["Продукт:", "Гео:", "Ставка:", "Валюта:", "Капа:", "Сорс:", "Баер:", "ПП:"]):
-            key, value = line.split(":", 1)
-            attributes[key.lower().strip()] = value.strip()
-        elif line.startswith("http") or "http" in line:
-            if "](" in line or "|" in line:
-                parts = line.split("|")
-                if len(parts) == 2:
-                    attributes["links"].append((current_label or "NoName", parts[1].strip("]")))
-            else:
-                attributes["links"].append((current_label or "NoName", line.strip()))
-        else:
-            current_label = line.strip()
+        if line.startswith("id_prod"):
+            base_name = line
+        elif line.startswith("Продукт:"):
+            product = line.split(":", 1)[1].strip()
+        elif line.startswith("Гео:"):
+            geo = line.split(":", 1)[1].strip()
+        elif line.startswith("Ставка:"):
+            payout = line.split(":", 1)[1].strip()
+        elif line.startswith("Валюта:"):
+            currency = line.split(":", 1)[1].strip()
+        elif line.startswith("Капа:"):
+            cap = line.split(":", 1)[1].strip()
+        elif line.startswith("Сорс:"):
+            source = line.split(":", 1)[1].strip()
+        elif line.startswith("Баер:"):
+            buyer = line.split(":", 1)[1].strip()
+        elif line.startswith("ПП:"):
+            pp = line.split(":", 1)[1].strip()
+        elif line.endswith(":"):
+            current_label = line[:-1]
+        elif line.startswith("http") and current_label:
+            links.append((current_label, line))
+            current_label = ""
 
-    return attributes
+    if not base_name or not links:
+        logging.warning("Missing base name or links.")
+        return {"status": "insufficient data"}
 
-@app.post("/jira-to-keitaro")
-async def jira_webhook(request: Request):
-    payload = await request.json()
-    issue = payload.get("issue", {})
-    fields = issue.get("fields", {})
-    description = fields.get("description", "")
-    if not description:
-        return {"error": "No description"}
-
-    offer_data = extract_offer_blocks(description)
-    responses = []
-
-    for label, link in offer_data["links"]:
-        offer_name = f"{offer_data['id']} - Продукт: {offer_data.get('продукт')} Гео: {offer_data.get('гео')} Ставка: {offer_data.get('ставка')} Валюта: {offer_data.get('валюта')} Капа: {offer_data.get('капа')} Сорс: {offer_data.get('сорс')} Баер: {offer_data.get('баер')} - {label}"
-        country_code = offer_data.get("гео")
-        data = {
+    for label, url in links:
+        offer_name = f"{base_name} - Продукт: {product} Гео: {geo} Ставка: {payout} Валюта: {currency} Капа: {cap} Сорс: {source} Баер: {buyer} - {label}"
+        payload = {
             "name": offer_name,
-            "action_payload": link,
-            "country": [country_code] if country_code else [],
-            "notes": f"PP: {offer_data.get('пп', '')}",
-            "offer_type": "external",
-            "action_type": "http"
+            "affiliate_network_id": 0,
+            "country": [geo],
+            "state": "active",
+            "action_type": "http",
+            "action_payload": url,
+            "offer_type": "external"
         }
 
         headers = {
-            "API-KEY": KEITARO_API_KEY,
+            "API-KEY": API_KEY,
             "Content-Type": "application/json"
         }
 
-        try:
-            r = httpx.post(f"{KEITARO_URL}/admin_api/v1/offers", headers=headers, json=data, timeout=10)
-            responses.append({"status": r.status_code, "body": r.text})
-        except Exception as e:
-            responses.append({"error": str(e)})
+        logging.info(f"Sending offer: {offer_name}")
+        response = requests.post(API_URL, json=payload, headers=headers)
+        logging.info(f"Response: {response.status_code} - {response.text}")
 
-    return {"results": responses}
+    return {"status": "processed", "offers_created": len(links)}
