@@ -1,2 +1,3 @@
-# Keitaro Offer Creator
-Автоматическое создание офферов из задач Jira через webhook.
+# Jira to Keitaro Sync
+
+Syncs Jira issues to Keitaro offers automatically.

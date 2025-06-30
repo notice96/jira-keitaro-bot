@@ -1,81 +1,105 @@
 import os
-import logging
+import json
+import httpx
 from fastapi import FastAPI, Request
-import requests
+from pydantic import BaseModel
+from typing import List
 
 app = FastAPI()
-logging.basicConfig(level=logging.INFO)
 
-API_URL = os.getenv("API_URL")
-API_KEY = os.getenv("API_KEY")
+KEITARO_API_KEY = os.getenv("KEITARO_API_KEY")
+KEITARO_API_URL = os.getenv("KEITARO_API_URL")
 
-@app.post("/")
-async def handle_webhook(request: Request):
-    data = await request.json()
-    logging.info(f"Received data: {data}")
+class JiraUser(BaseModel):
+    displayName: str
 
-    description = data.get("issue", {}).get("fields", {}).get("description", "")
-    if not description:
-        logging.warning("No description found.")
-        return {"status": "no description"}
+class JiraIssueFields(BaseModel):
+    description: str
+    summary: str
 
-    lines = description.splitlines()
-    base_name = None
-    product = geo = payout = currency = cap = source = buyer = pp = ""
+class JiraIssue(BaseModel):
+    key: str
+    fields: JiraIssueFields
+
+class JiraWebhookPayload(BaseModel):
+    issue: JiraIssue
+    user: JiraUser
+
+def parse_offer_description(text: str):
+    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+    data = {}
     links = []
     current_label = ""
 
     for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        if line.startswith("id_prod"):
-            base_name = line
+        if line.lower().startswith("id_prod"):
+            data["id"] = line
         elif line.startswith("Продукт:"):
-            product = line.split(":", 1)[1].strip()
+            data["product"] = line.split("Продукт:")[1].strip()
         elif line.startswith("Гео:"):
-            geo = line.split(":", 1)[1].strip()
+            data["geo"] = line.split("Гео:")[1].strip()
         elif line.startswith("Ставка:"):
-            payout = line.split(":", 1)[1].strip()
+            data["payout"] = line.split("Ставка:")[1].strip()
         elif line.startswith("Валюта:"):
-            currency = line.split(":", 1)[1].strip()
+            data["currency"] = line.split("Валюта:")[1].strip()
         elif line.startswith("Капа:"):
-            cap = line.split(":", 1)[1].strip()
+            data["cap"] = line.split("Капа:")[1].strip()
         elif line.startswith("Сорс:"):
-            source = line.split(":", 1)[1].strip()
+            data["source"] = line.split("Сорс:")[1].strip()
         elif line.startswith("Баер:"):
-            buyer = line.split(":", 1)[1].strip()
+            data["buyer"] = line.split("Баер:")[1].strip()
         elif line.startswith("ПП:"):
-            pp = line.split(":", 1)[1].strip()
-        elif line.endswith(":"):
-            current_label = line[:-1]
-        elif line.startswith("http") and current_label:
-            links.append((current_label, line))
-            current_label = ""
+            data["pp"] = line.split("ПП:")[1].strip()
+        elif line.startswith("http"):
+            if current_label:
+                links.append((current_label, line.strip()))
+                current_label = ""
+        else:
+            current_label = line.strip()
+    data["links"] = links
+    return data
 
-    if not base_name or not links:
-        logging.warning("Missing base name or links.")
-        return {"status": "insufficient data"}
+def make_offer_payload(offer_data: dict, label: str, url: str):
+    name = f"{offer_data['id']} - Продукт: {offer_data['product']} Гео: {offer_data['geo']} Ставка: {offer_data['payout']} Валюта: {offer_data['currency']} Капа: {offer_data['cap']} Сорс: {offer_data['source']} Баер: {offer_data['buyer']} - {label}"
+    return {
+        "name": name,
+        "country": [offer_data["geo"]],
+        "affiliate_network_id": 0,
+        "payout_value": float(offer_data["payout"]),
+        "payout_currency": offer_data["currency"],
+        "payout_type": "",
+        "notes": "",
+        "state": "active",
+        "payout_auto": False,
+        "payout_upsell": False,
+        "action_type": "http",
+        "action_payload": url,
+        "offer_type": "external",
+        "conversion_cap_enabled": False,
+        "daily_cap": 0,
+        "conversion_timezone": "UTC",
+        "alternative_offer_id": 0,
+        "values": ""
+    }
 
-    for label, url in links:
-        offer_name = f"{base_name} - Продукт: {product} Гео: {geo} Ставка: {payout} Валюта: {currency} Капа: {cap} Сорс: {source} Баер: {buyer} - {label}"
-        payload = {
-            "name": offer_name,
-            "affiliate_network_id": 0,
-            "country": [geo],
-            "state": "active",
-            "action_type": "http",
-            "action_payload": url,
-            "offer_type": "external"
-        }
+@app.post("/jira-to-keitaro")
+async def handle_webhook(request: Request):
+    payload = await request.json()
+    data = JiraWebhookPayload(**payload)
+    description = data.issue.fields.description
+    parsed = parse_offer_description(description)
 
-        headers = {
-            "API-KEY": API_KEY,
-            "Content-Type": "application/json"
-        }
-
-        logging.info(f"Sending offer: {offer_name}")
-        response = requests.post(API_URL, json=payload, headers=headers)
-        logging.info(f"Response: {response.status_code} - {response.text}")
-
-    return {"status": "processed", "offers_created": len(links)}
+    created = []
+    async with httpx.AsyncClient() as client:
+        for label, link in parsed.get("links", []):
+            offer_payload = make_offer_payload(parsed, label, link)
+            res = await client.post(
+                f"{KEITARO_API_URL}/offers",
+                headers={
+                    "API-KEY": KEITARO_API_KEY,
+                    "Content-Type": "application/json"
+                },
+                json=offer_payload
+            )
+            created.append((res.status_code, res.text))
+    return {"created": created}
