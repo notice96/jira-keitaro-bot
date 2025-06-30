@@ -93,11 +93,6 @@ async def create_keitaro_offer(offer_data):
 
 
 def convert_country(geo):
-    iso_map = {
-        "PK": "Pakistan",
-        "IN": "India",
-        "ID": "Indonesia",
-        "VN": "Vietnam",
-        "BD": "Bangladesh"
+    return geo.upper()
     }
     return iso_map.get(geo.upper(), geo)
