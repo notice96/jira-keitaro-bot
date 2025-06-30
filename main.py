@@ -1,3 +1,4 @@
+
 import os
 import json
 import re
@@ -30,13 +31,14 @@ async def jira_to_keitaro(request: Request):
 
     return {"message": "Offers processed.", "results": created_offers}
 
+
 def parse_offer_description(text):
     pattern = (
-        r"id_prod\{(?P<id>\d+)} - Продукт: (?P<product>.+?) Гео: (?P<geo>.+?)\n"
-        r"Ставка: (?P<payout>.+?) Валюта: (?P<currency>.+?) Капа: (?P<cap>.+?)\n"
-        r"Сорс: (?P<source>.+?) Баер: (?P<buyer>.+?) ПП:(?P<pp>.+?)\n"
-        r"Доп инфо:.*\n"
-        r"(?P<links_text>https?://[\S]+)"
+        r"id_prod\{(?P<id>\d+)},*?Продукт:\s*(?P<product>,+?)\n" 
+        r"Гео:\s*(?P<geo>,+?)\nСтавка:\s*(?P<payout>,+?)\n" 
+        r"Валюта:\s*(?P<currency>,+?)\nКапа:\s*(?P<cap>,+?)\n"
+        r"Сорс:\s*(?P<source>,+?)\nБаер:\s(?P<buyer>,+?)\nПП:(?P<pp>,+?)\n"
+        r"(?P<links_text>(?:,*?https?://[^\s\]]+)+)"
     )
 
     match = re.search(pattern, text, re.DOTALL)
@@ -50,7 +52,9 @@ def parse_offer_description(text):
     offers = []
     for label, url in link_matches:
         offer = {
-            "name": f"id_prod{{{groups['id']}}} - Продукт: {groups['product']} Гео: {groups['geo']} Ставка: {groups['payout']} Валюта: {groups['currency']} Капа: {groups['cap']} Сорс: {groups['source']} Баер: {groups['buyer']} {label.strip()}",
+            "name": f"id_prod{{{groups['id']}}} - Продукт: {groups['product']} Гео: {groups['geo']} "
+                    f"Ставка: {groups['payout']} Валюта: {groups['currency']} Капа: {groups['cap']} "
+                    f"Сорс: {groups['source']} Баер: {groups['buyer']} - {label.strip()}",
             "action_payload": url.strip(),
             "country": [convert_country(groups["geo"].strip())],
             "notes": "",
@@ -72,18 +76,21 @@ def parse_offer_description(text):
 
     return offers
 
+
 async def create_keitaro_offer(offer_data):
     url = KEITARO_BASE_URL
     headers = {
         "API-KEY": KEITARO_API_KEY,
         "Content-Type": "application/json"
     }
+    
     async with httpx.AsyncClient() as client:
         response = await client.post(url, headers=headers, json=offer_data)
         return {
             "status_code": response.status_code,
             "response": response.text
         }
+
 
 def convert_country(geo):
     iso_map = {
