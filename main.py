@@ -1,67 +1,63 @@
 from fastapi import FastAPI, Request
+from pydantic import BaseModel
 import httpx
 import re
+import os
 
 app = FastAPI()
 
-KEITARO_API_URL = "http://77.221.155.15/admin_api/v1/offers"
 KEITARO_API_KEY = "0ed98ed7f659004f3f7e68e68984b2fa"
+KEITARO_BASE_URL = "https://keitaro_url_goes_here/admin_api/v1"
 
-def parse_offer_data(description: str, title: str):
-    data = {
-        "title": title,
-        "notes": description
+class JiraWebhookPayload(BaseModel):
+    issue: dict
+
+def extract_offer_data(description: str):
+    patterns = {
+        "product": r"Продукт:\s*(.+)",
+        "geo": r"Гео:\s*(.+)",
+        "payout": r"Ставка:\s*(.+)",
+        "currency": r"Валюта:\s*(.+)",
+        "cap": r"Капа:\s*(.+)",
+        "source": r"Сорс:\s*(.+)",
+        "buyer": r"Баер:\s*(.+)",
+        "pp": r"ПП:\s*(.+)",
+        "reg_link": r"Reg\.Form\n(https?://[^\s]+)",
+        "wheel_link": r"Wheel Girls\n(https?://[^\s]+)"
     }
-
-    product_match = re.search(r"Продукт: (.+)", description)
-    geo_match = re.search(r"Гео: (.+)", description)
-    payout_match = re.search(r"Ставка: (.+)", description)
-    currency_match = re.search(r"Валюта: (.+)", description)
-    cap_match = re.search(r"Капа: (.+)", description)
-    source_match = re.search(r"Сорс: (.+)", description)
-    buyer_match = re.search(r"Баер: (.+)", description)
-    pp_match = re.search(r"ПП:(.+)", description)
-    reg_link_match = re.search(r"Reg\.Form\s*(https?://\S+)", description)
-    wheel_link_match = re.search(r"Wheel Girls\s*(https?://\S+)", description)
-
-    if product_match:
-        data["product"] = product_match.group(1).strip()
-    if geo_match:
-        data["geo"] = geo_match.group(1).strip()
-    if payout_match:
-        data["payout"] = payout_match.group(1).strip()
-    if currency_match:
-        data["currency"] = currency_match.group(1).strip()
-    if cap_match:
-        data["cap"] = cap_match.group(1).strip()
-    if source_match:
-        data["source"] = source_match.group(1).strip()
-    if buyer_match:
-        data["buyer"] = buyer_match.group(1).strip()
-    if pp_match:
-        data["pp"] = pp_match.group(1).strip()
-    if reg_link_match:
-        data["reg_link"] = reg_link_match.group(1).strip()
-    if wheel_link_match:
-        data["wheel_link"] = wheel_link_match.group(1).strip()
-
-    return data
-
-@app.get("/")
-async def root():
-    return {"message": "Hello from Railway"}
+    extracted = {}
+    for key, pattern in patterns.items():
+        match = re.search(pattern, description)
+        if match:
+            extracted[key] = match.group(1).strip()
+    return extracted
 
 @app.post("/jira-to-keitaro")
 async def jira_to_keitaro(request: Request):
-    payload = await request.json()
-    issue = payload.get("issue", {})
+    data = await request.json()
+    issue = data.get("issue", {})
     title = issue.get("fields", {}).get("summary", "")
     description = issue.get("fields", {}).get("description", "")
+    offer_data = extract_offer_data(description)
 
-    offer_data = parse_offer_data(description, title)
+    if not offer_data:
+        return {"status": "error", "detail": "Offer data not found in description"}
 
-    async with httpx.AsyncClient() as client:
-        headers = {"Authorization": f"Bearer {KEITARO_API_KEY}"}
-        response = await client.post(KEITARO_API_URL, json=offer_data, headers=headers)
+    headers = {"Api-Key": KEITARO_API_KEY}
 
-    return {"status": "sent", "response_status": response.status_code}
+    payload = {
+        "name": title,
+        "notes": description,
+        "country": offer_data.get("geo", ""),
+        "payout_value": offer_data.get("payout", ""),
+        "currency": offer_data.get("currency", "$"),
+        "status": "active"
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(f"{KEITARO_BASE_URL}/offers", json=payload, headers=headers)
+            response.raise_for_status()
+            return {"status": "success", "response": response.json()}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
