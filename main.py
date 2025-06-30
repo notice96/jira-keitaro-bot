@@ -56,7 +56,7 @@ def parse_offer_description(text):
                     f"Ставка: {groups['payout']} Валюта: {groups['currency']} Капа: {groups['cap']} "
                     f"Сорс: {groups['source']} Баер: {groups['buyer']} - {label.strip()}",
             "action_payload": url.strip(),
-            "country": [convert_country(groups["geo"].strip())],
+            "country": [groups["geo"].strip().upper()],
             "notes": "",
             "action_type": "http",
             "offer_type": "external",
@@ -90,14 +90,3 @@ async def create_keitaro_offer(offer_data):
             "status_code": response.status_code,
             "response": response.text
         }
-
-
-def convert_country(geo):
-    iso_map = {
-        "PK": "Pakistan",
-        "IN": "India",
-        "ID": "Indonesia",
-        "VN": "Vietnam",
-        "BD": "Bangladesh"
-    }
-    return iso_map.get(geo.upper(), geo)
