@@ -10,6 +10,10 @@ app = FastAPI()
 KEITARO_API_KEY = os.getenv("KEITARO_API_KEY")
 KEITARO_BASE_URL = os.getenv("KEITARO_BASE_URL")
 
+AFFILIATE_NETWORKS = {
+    "Glory Partners": 14,
+}
+
 @app.get("/")
 async def root():
     return {"message": "Server is running."}
@@ -72,7 +76,7 @@ def parse_offer_description(text):
             "payout_type": "",
             "payout_auto": False,
             "payout_upsell": False,
-            "affiliate_network_id": 0,
+            "affiliate_network_id": AFFILIATE_NETWORKS.get(groups["pp"].strip(), 0),
         }
         offers.append(offer)
 
