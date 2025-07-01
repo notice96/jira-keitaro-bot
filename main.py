@@ -90,7 +90,7 @@ def parse_offer_description(text):
             "payout_auto": False,
             "payout_upsell": False,
             "affiliate_network_id": AFFILIATE_NETWORKS.get(groups["pp"].strip(), 0),
-            "group_id": GROUPS.get(groups["buyer"].strip(), 0),
+            "group_id": GROUPS.get(groups["buyer"].strip(), 0)
         }
         offers.append(offer)
 
