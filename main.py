@@ -12,7 +12,8 @@ KEITARO_BASE_URL = os.getenv("KEITARO_BASE_URL")
 
 AFFILIATE_NETWORKS = {
     "ExGaming": 54,
-    "Glory Partners": 14
+    "Glory Partners": 14,
+    "4RA PARTNER": 17
 }
 
 GROUPS = {
