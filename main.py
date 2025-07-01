@@ -54,7 +54,7 @@ def parse_offer_description(text):
 
     groups = match.groupdict()
     links_section = groups["links_text"]
-    link_matches = re.findall(r"([^\n]+)\n(https?://[^\s]+)", links_section)
+    link_matches = re.findall(r"(.*?)\n\[(https?://[^\]]+)]", links_section)
 
     offers = []
     for label, url in link_matches:
