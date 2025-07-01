@@ -47,15 +47,17 @@ def parse_offer_description(text):
 
     groups = match.groupdict()
     links_section = groups["links_text"]
-    link_matches = re.findall(r"([^\n]+)\s*\n\s*(https?://[^\s]+)", links_section)
+    link_matches = re.findall(r"^(.*?)\n(https?://[^\s]+)", links_section, re.MULTILINE)
 
     offers = []
     for label, url in link_matches:
+        clean_url = url.strip().split("|")[0]
+        
         offer = {
             "name": f"id_prod{{{groups['id']}}} - Продукт: {groups['product']} Гео: {groups['geo']} "
                     f"Ставка: {groups['payout']} Валюта: {groups['currency']} Капа: {groups['cap']} "
                     f"Сорс: {groups['source']} Баер: {groups['buyer']} - {label.strip()}",
-            "action_payload": url.strip(),
+            "action_payload": clean_url,
             "country": [groups["geo"].strip().upper()],
             "notes": "",
             "action_type": "http",
