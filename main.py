@@ -11,7 +11,19 @@ KEITARO_API_KEY = os.getenv("KEITARO_API_KEY")
 KEITARO_BASE_URL = os.getenv("KEITARO_BASE_URL")
 
 AFFILIATE_NETWORKS = {
-    "Glory Partners": 14,
+    "ExGaming": 54,
+    "Glory Partners": 14
+}
+
+GROUPS = {
+    "@dzho666": 28,
+    "@alihmaaff": 26,
+    "@berrnard": 36,
+    "@d_traffq": 41,
+    "@toni7977": 29,
+    "@sequencezz": 40,
+    "@iliia_xteam": 30,
+    "@julikjar": 33
 }
 
 @app.get("/")
@@ -77,6 +89,7 @@ def parse_offer_description(text):
             "payout_auto": False,
             "payout_upsell": False,
             "affiliate_network_id": AFFILIATE_NETWORKS.get(groups["pp"].strip(), 0),
+            "group_id": GROUPS.get(groups["buyer"].strip(), 0),
         }
         offers.append(offer)
 
