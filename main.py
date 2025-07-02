@@ -39,7 +39,7 @@ async def jira_to_keitaro(request: Request):
 def parse_offer_description(text):
     try:
         soup = BeautifulSoup(text, "html.parser")
-        lines = soup.get_text().splitlines()
+        lines = [line.strip() for line in soup.get_text().splitlines() if line.strip()]
 
         offer_data = {
             "id": "", "product": "", "geo": "", "payout": "",
