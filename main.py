@@ -2,6 +2,7 @@ import os
 import json
 import httpx
 from bs4 import BeautifulSoup
+from urllib.parse import unquote
 from fastapi import FastAPI, Request
 
 app = FastAPI()
@@ -81,8 +82,9 @@ def parse_offer_description(text):
             if "http" in line:
                 label = lines[i - 1]
 
-                # ✅ Чистим ссылку с учетом Jira-формата [url|url]
-                clean_url = line.strip("[]").split("|")[0]
+                # ✅ Очистка и декодирование ссылки
+                raw_url = line.strip("[]").split("|")[0]
+                clean_url = unquote(raw_url.replace("⊂", "&"))
 
                 try:
                     payout_value = float(offer_data["payout"])
