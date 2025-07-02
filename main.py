@@ -1,9 +1,8 @@
-
 import os
-import json
 import re
 import httpx
 from fastapi import FastAPI, Request
+from bs4 import BeautifulSoup
 
 app = FastAPI()
 
@@ -15,7 +14,6 @@ AFFILIATE_NETWORKS = {
     "Glory Partners": 14,
     "4RA PARTNER": 17
 }
-
 
 @app.get("/")
 async def root():
@@ -41,11 +39,11 @@ async def jira_to_keitaro(request: Request):
 
 def parse_offer_description(text):
     pattern = (
-        r"id_prod\{(?P<id>\d+)}.*?Продукт:\s*(?P<product>.+?)\n" 
-        r"Гео:\s*(?P<geo>.+?)\nСтавка:\s*(?P<payout>.+?)\n" 
+        r"id_prod\{(?P<id>\d+)}.*?Продукт:\s*(?P<product>.+?)\n"
+        r"Гео:\s*(?P<geo>.+?)\nСтавка:\s*(?P<payout>.+?)\n"
         r"Валюта:\s*(?P<currency>.+?)\nКапа:\s*(?P<cap>.+?)\n"
         r"Сорс:\s*(?P<source>.+?)\nБаер:\s(?P<buyer>.+?)\nПП:(?P<pp>.+?)\n"
-        r"(?P<links_text>(?:.*?https?://[^\s\]]+)+)"
+        r"ЛЕНД:\n(?P<links_text>.+)"
     )
 
     match = re.search(pattern, text, re.DOTALL)
@@ -53,17 +51,29 @@ def parse_offer_description(text):
         return
 
     groups = match.groupdict()
-    links_section = groups["links_text"].strip() + "\n"
-    link_matches = re.findall(r"(.*?)\n\[(https?://[^\]]+)]", links_section)
+    links_text = groups["links_text"].strip()
+
+    # Подготовка текста как HTML для BeautifulSoup
+    html = ""
+    for line in links_text.split("\n"):
+        if line.strip().startswith("http"):
+            html += f'<a href="{line.strip()}">link</a>\n'
+        else:
+            html += f'<p>{line.strip()}</p>\n'
+
+    soup = BeautifulSoup(html, "html.parser")
+    descriptions = soup.find_all("p")
+    links = soup.find_all("a")
 
     offers = []
-    for label, url in link_matches:
-        clean_url = url.strip().split("|")[0]
-        
+    for desc, a in zip(descriptions, links):
+        clean_url = a['href'].split("|")[0].strip()
+        label = desc.get_text().strip()
+
         offer = {
             "name": f"id_prod{{{groups['id']}}} - Продукт: {groups['product']} Гео: {groups['geo']} "
                     f"Ставка: {groups['payout']} Валюта: {groups['currency']} Капа: {groups['cap']} "
-                    f"Сорс: {groups['source']} Баер: {groups['buyer']} - {label.strip()}",
+                    f"Сорс: {groups['source']} Баер: {groups['buyer']} - {label}",
             "action_payload": clean_url,
             "country": [groups["geo"].strip().upper()],
             "notes": "",
@@ -92,7 +102,7 @@ async def create_keitaro_offer(offer_data):
         "API-KEY": KEITARO_API_KEY,
         "Content-Type": "application/json"
     }
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.post(url, headers=headers, json=offer_data)
         return {
