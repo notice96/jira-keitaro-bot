@@ -12,7 +12,8 @@ KEITARO_BASE_URL = os.getenv("KEITARO_BASE_URL")
 AFFILIATE_NETWORKS = {
     "ExGaming": 54,
     "Glory Partners": 14,
-    "4RA PARTNER": 17
+    "4RA PARTNER": 17,
+    "partner": 0  # по умолчанию можно 0, если не настроен
 }
 
 @app.get("/")
@@ -35,6 +36,7 @@ async def jira_to_keitaro(request: Request):
         created_offers.append(response)
 
     return {"message": "Offers processed.", "results": created_offers}
+
 
 def parse_offer_description(text):
     try:
@@ -76,9 +78,15 @@ def parse_offer_description(text):
 
         offers = []
         for i in range(1, len(lines)):
-            if lines[i].startswith("http"):
+            line = lines[i]
+            if "http" in line:
                 label = lines[i - 1]
-                url = lines[i]
+
+                # Обработка ссылки в формате [url|url]
+                if line.startswith("[") and "|" in line:
+                    url = line.strip("[]").split("|")[0]
+                else:
+                    url = line.strip()
 
                 try:
                     payout_value = float(offer_data["payout"])
@@ -119,6 +127,7 @@ def parse_offer_description(text):
         print("📄 Содержимое задачи:\n", text)
         return []
 
+
 async def create_keitaro_offer(offer_data):
     url = KEITARO_BASE_URL
     headers = {
@@ -129,13 +138,13 @@ async def create_keitaro_offer(offer_data):
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(url, headers=headers, json=offer_data)
-            print("\ud83d\udce6 Ответ от Keitaro:", response.status_code, response.text)
+            print("📦 Ответ от Keitaro:", response.status_code, response.text)
             return {
                 "status_code": response.status_code,
                 "response": response.text
             }
     except Exception as e:
-        print("\u274c Ошибка при отправке оффера в Keitaro:", str(e))
+        print("❌ Ошибка при отправке оффера в Keitaro:", str(e))
         return {
             "status_code": 500,
             "response": f"Ошибка при отправке оффера: {str(e)}"
