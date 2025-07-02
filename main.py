@@ -96,14 +96,14 @@ def parse_offer_description(text):
                 raw_url = line.strip("[]")
                 if "|" in raw_url:
                     raw_url = raw_url.split("|")[0]
-                clean_url = unquote(raw_url.replace("⊂", "&"))
+                clean_url = unquote(raw_url.replace("⊂_id", "&sub_id"))
 
                 # Проверка на отдельную строку с параметрами
                 if i + 1 < len(lines) and ("sub_id" in lines[i + 1] or "⊂" in lines[i + 1]):
                     param_line = lines[i + 1].strip("[]")
                     if "|" in param_line:
                         param_line = param_line.split("|")[0]
-                    decoded = unquote(param_line.replace("⊂", "&"))
+                    decoded = unquote(param_line.replace("⊂_id", "&sub_id"))
                     if decoded.startswith("&"):
                         clean_url += decoded
                     else:
