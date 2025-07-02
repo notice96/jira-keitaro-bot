@@ -88,21 +88,33 @@ def parse_offer_description(text):
             print(f"{k}: {v}")
 
         offers = []
-        for i in range(1, len(lines)):
+        i = 1
+        while i < len(lines):
             line = lines[i]
             if "http" in line:
                 label = lines[i - 1]
+                raw_url = line.strip("[]")
+                if "|" in raw_url:
+                    raw_url = raw_url.split("|")[0]
+                clean_url = unquote(raw_url.replace("⊂", "&"))
 
-                # ✅ Очистка и декодирование ссылки
-                raw_url = line.strip("[]").split("|")[0]
-                clean_url = unquote(
-                    raw_url.replace("⊂_id", "&sub_id")  # 💡 фиксируем ломанные ссылки
-                )
+                # Проверка на отдельную строку с параметрами
+                if i + 1 < len(lines) and ("sub_id" in lines[i + 1] or "⊂" in lines[i + 1]):
+                    param_line = lines[i + 1].strip("[]")
+                    if "|" in param_line:
+                        param_line = param_line.split("|")[0]
+                    decoded = unquote(param_line.replace("⊂", "&"))
+                    if decoded.startswith("&"):
+                        clean_url += decoded
+                    else:
+                        clean_url += "&" + decoded
+                    i += 1  # пропускаем строку с параметрами
 
                 try:
                     payout_value = float(offer_data["payout"])
                 except ValueError:
                     print(f"❌ Ошибка: ставка ('Ставка') не число: {offer_data['payout']}")
+                    i += 1
                     continue
 
                 offer = {
@@ -129,6 +141,7 @@ def parse_offer_description(text):
                 }
                 print(f"\n✅ Оффер добавлен: {offer['name']}")
                 offers.append(offer)
+            i += 1
 
         if not offers:
             print("❌ Не найдено ни одного валидного оффера.")
