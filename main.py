@@ -36,25 +36,16 @@ async def jira_to_keitaro(request: Request):
 
     return {"message": "Offers processed.", "results": created_offers}
 
-
 def parse_offer_description(text):
-    soup = BeautifulSoup(text, "html.parser")
-    lines = text.splitlines()
-
     try:
+        soup = BeautifulSoup(text, "html.parser")
+        lines = soup.get_text().splitlines()
+
         offer_data = {
-            "id": "",
-            "product": "",
-            "geo": "",
-            "payout": "",
-            "currency": "",
-            "cap": "",
-            "source": "",
-            "buyer": "",
-            "pp": ""
+            "id": "", "product": "", "geo": "", "payout": "",
+            "currency": "", "cap": "", "source": "", "buyer": "", "pp": ""
         }
 
-        # Парсим основные поля
         for line in lines:
             line = line.strip()
             if line.startswith("id_prod{"):
@@ -79,8 +70,15 @@ def parse_offer_description(text):
         offers = []
         for i in range(1, len(lines)):
             if lines[i].strip().startswith("http"):
-                label = lines[i-1].strip()
+                label = lines[i - 1].strip()
                 url = lines[i].strip()
+
+                try:
+                    payout_value = float(offer_data["payout"])
+                except ValueError:
+                    print(f"\u274c Ошибка: ставка ('Ставка') не число: {offer_data['payout']}")
+                    continue
+
                 offer = {
                     "name": f"id_prod{{{offer_data['id']}}} - Продукт: {offer_data['product']} Гео: {offer_data['geo']} "
                             f"Ставка: {offer_data['payout']} Валюта: {offer_data['currency']} Капа: {offer_data['cap']} "
@@ -95,7 +93,7 @@ def parse_offer_description(text):
                     "conversion_timezone": "UTC",
                     "alternative_offer_id": 0,
                     "values": "",
-                    "payout_value": float(offer_data["payout"]),
+                    "payout_value": payout_value,
                     "payout_currency": offer_data["currency"],
                     "payout_type": "",
                     "payout_auto": False,
@@ -104,13 +102,14 @@ def parse_offer_description(text):
                 }
                 offers.append(offer)
 
+        if not offers:
+            print("\u274c Не найдено ни одного валидного оффера.")
         return offers
-    except Exception as e:
-        print("❌ Ошибка при парсинге задачи Jira:", str(e))
-        print("📄 Содержимое задачи:")
-        print(text)
-        return []
 
+    except Exception as e:
+        print("\u274c Общая ошибка при парсинге задачи Jira:", str(e))
+        print("\ud83d\udcc4 Содержимое задачи:\n", text)
+        return []
 
 async def create_keitaro_offer(offer_data):
     url = KEITARO_BASE_URL
@@ -122,11 +121,13 @@ async def create_keitaro_offer(offer_data):
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(url, headers=headers, json=offer_data)
+            print("\ud83d\udce6 Ответ от Keitaro:", response.status_code, response.text)
             return {
                 "status_code": response.status_code,
                 "response": response.text
             }
     except Exception as e:
+        print("\u274c Ошибка при отправке оффера в Keitaro:", str(e))
         return {
             "status_code": 500,
             "response": f"Ошибка при отправке оффера: {str(e)}"
