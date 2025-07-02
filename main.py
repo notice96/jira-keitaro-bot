@@ -41,13 +41,16 @@ def parse_offer_description(text):
         soup = BeautifulSoup(text, "html.parser")
         lines = [line.strip() for line in soup.get_text().splitlines() if line.strip()]
 
+        print("📥 Все строки из задачи Jira:")
+        for idx, l in enumerate(lines):
+            print(f"{idx + 1}: {l}")
+
         offer_data = {
             "id": "", "product": "", "geo": "", "payout": "",
             "currency": "", "cap": "", "source": "", "buyer": "", "pp": ""
         }
 
         for line in lines:
-            line = line.strip()
             if line.startswith("id_prod{"):
                 offer_data["id"] = line.split("{")[1].split("}")[0]
             elif line.startswith("Продукт:"):
@@ -67,16 +70,20 @@ def parse_offer_description(text):
             elif line.startswith("ПП:"):
                 offer_data["pp"] = line.replace("ПП:", "").strip()
 
+        print("\n🧾 Спаршенные данные:")
+        for k, v in offer_data.items():
+            print(f"{k}: {v}")
+
         offers = []
         for i in range(1, len(lines)):
-            if lines[i].strip().startswith("http"):
-                label = lines[i - 1].strip()
-                url = lines[i].strip()
+            if lines[i].startswith("http"):
+                label = lines[i - 1]
+                url = lines[i]
 
                 try:
                     payout_value = float(offer_data["payout"])
                 except ValueError:
-                    print(f"\u274c Ошибка: ставка ('Ставка') не число: {offer_data['payout']}")
+                    print(f"❌ Ошибка: ставка ('Ставка') не число: {offer_data['payout']}")
                     continue
 
                 offer = {
@@ -100,15 +107,16 @@ def parse_offer_description(text):
                     "payout_upsell": False,
                     "affiliate_network_id": AFFILIATE_NETWORKS.get(offer_data["pp"], 0),
                 }
+                print(f"\n✅ Оффер добавлен: {offer['name']}")
                 offers.append(offer)
 
         if not offers:
-            print("\u274c Не найдено ни одного валидного оффера.")
+            print("❌ Не найдено ни одного валидного оффера.")
         return offers
 
     except Exception as e:
-        print("\u274c Общая ошибка при парсинге задачи Jira:", str(e))
-        print("\ud83d\udcc4 Содержимое задачи:\n", text)
+        print("❌ Общая ошибка при парсинге задачи Jira:", str(e))
+        print("📄 Содержимое задачи:\n", text)
         return []
 
 async def create_keitaro_offer(offer_data):
