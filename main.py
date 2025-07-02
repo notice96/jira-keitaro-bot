@@ -16,6 +16,17 @@ AFFILIATE_NETWORKS = {
     "4RA PARTNER": 17
 }
 
+OFFER_GROUPS = {
+    "@alihmaaff": 26,
+    "@berrnard": 36,
+    "@d_traffq": 41,
+    "@dzho666": 28,
+    "@iliia_xteam": 30,
+    "@julikjar": 33,
+    "@sequencezz": 40,
+    "@toni7977": 29
+}
+
 @app.get("/")
 async def root():
     return {"message": "Server is running."}
@@ -114,6 +125,7 @@ def parse_offer_description(text):
                     "payout_auto": False,
                     "payout_upsell": False,
                     "affiliate_network_id": AFFILIATE_NETWORKS.get(offer_data["pp"], 0),
+                    "group_id": OFFER_GROUPS.get(offer_data["buyer"], 0)
                 }
                 print(f"\n✅ Оффер добавлен: {offer['name']}")
                 offers.append(offer)
