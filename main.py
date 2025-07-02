@@ -1,7 +1,6 @@
 import os
 import json
 import httpx
-import html
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, Request
 
@@ -82,18 +81,8 @@ def parse_offer_description(text):
             if "http" in line:
                 label = lines[i - 1]
 
-                # 🧼 Извлекаем и очищаем URL
-                if line.startswith("[") and "|" in line:
-                    raw_url = line.strip("[]").split("|")[0]
-                else:
-                    raw_url = line
-
-                cleaned_url = (
-                    raw_url.replace("⊂", "&")       # заменяем символы
-                           .replace("∈", "&")       # доп. символы если есть
-                           .strip()
-                )
-                cleaned_url = html.unescape(cleaned_url)  # &amp; => &
+                # ✅ Чистим ссылку с учетом Jira-формата [url|url]
+                clean_url = line.strip("[]").split("|")[0]
 
                 try:
                     payout_value = float(offer_data["payout"])
@@ -105,7 +94,7 @@ def parse_offer_description(text):
                     "name": f"id_prod{{{offer_data['id']}}} - Продукт: {offer_data['product']} Гео: {offer_data['geo']} "
                             f"Ставка: {offer_data['payout']} Валюта: {offer_data['currency']} Капа: {offer_data['cap']} "
                             f"Сорс: {offer_data['source']} Баер: {offer_data['buyer']} - {label}",
-                    "action_payload": cleaned_url,
+                    "action_payload": clean_url,
                     "country": [offer_data["geo"]],
                     "notes": "",
                     "action_type": "http",
