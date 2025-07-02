@@ -84,7 +84,9 @@ def parse_offer_description(text):
 
                 # ✅ Очистка и декодирование ссылки
                 raw_url = line.strip("[]").split("|")[0]
-                clean_url = unquote(raw_url.replace("⊂", "&"))
+                clean_url = unquote(
+                    raw_url.replace("⊂_id", "&sub_id")  # 💡 фиксируем ломанные ссылки
+                )
 
                 try:
                     payout_value = float(offer_data["payout"])
