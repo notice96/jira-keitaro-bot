@@ -36,8 +36,9 @@ async def root():
 async def jira_to_keitaro(request: Request):
     body = await request.json()
     issue = body.get("issue", {})
-    description = issue.get("fields", {}).get("description", "")
-    parsed_data = parse_offer_description(description)
+    fields = issue.get("fields", {})
+
+    parsed_data = parse_offer_from_fields(fields)
 
     if not parsed_data:
         return {"message": "No valid offer data found in Jira issue."}
@@ -49,44 +50,27 @@ async def jira_to_keitaro(request: Request):
 
     return {"message": "Offers processed.", "results": created_offers}
 
-
-def parse_offer_description(text):
+def parse_offer_from_fields(fields):
     try:
-        soup = BeautifulSoup(text, "html.parser")
-        lines = [line.strip() for line in soup.get_text().splitlines() if line.strip()]
-
-        print("📥 Все строки из задачи Jira:")
-        for idx, l in enumerate(lines):
-            print(f"{idx + 1}: {l}")
-
         offer_data = {
-            "id": "", "product": "", "geo": "", "payout": "",
-            "currency": "", "cap": "", "source": "", "buyer": "", "pp": ""
+            "id": fields.get("summary", "").replace("id_prod{", "").replace("}", ""),
+            "product": fields.get("customfield_10138", {}).get("value", ""),
+            "geo": fields.get("customfield_10157", "").strip().upper(),
+            "payout": str(fields.get("customfield_10159", "")),
+            "currency": fields.get("customfield_10160", "").strip(),
+            "cap": fields.get("customfield_10161", "").strip(),
+            "source": fields.get("customfield_10162", "").strip(),
+            "buyer": fields.get("customfield_10164", "").strip(),
+            "pp": fields.get("customfield_10158", "").strip()
         }
 
-        for line in lines:
-            if line.startswith("id_prod{"):
-                offer_data["id"] = line.split("{")[1].split("}")[0]
-            elif line.startswith("Продукт:"):
-                offer_data["product"] = line.replace("Продукт:", "").strip()
-            elif line.startswith("Гео:"):
-                offer_data["geo"] = line.replace("Гео:", "").strip().upper()
-            elif line.startswith("Ставка:"):
-                offer_data["payout"] = line.replace("Ставка:", "").strip()
-            elif line.startswith("Валюта:"):
-                offer_data["currency"] = line.replace("Валюта:", "").strip()
-            elif line.startswith("Капа:"):
-                offer_data["cap"] = line.replace("Капа:", "").strip()
-            elif line.startswith("Сорс:"):
-                offer_data["source"] = line.replace("Сорс:", "").strip()
-            elif line.startswith("Баер:"):
-                offer_data["buyer"] = line.replace("Баер:", "").strip()
-            elif line.startswith("ПП:"):
-                offer_data["pp"] = line.replace("ПП:", "").strip()
-
-        print("\n🧾 Спаршенные данные:")
+        print("\n🧾 Спаршенные данные из полей:")
         for k, v in offer_data.items():
             print(f"{k}: {v}")
+
+        raw_links = fields.get("customfield_10165", "")
+        soup = BeautifulSoup(raw_links, "html.parser")
+        lines = [line.strip() for line in soup.get_text().splitlines() if line.strip()]
 
         offers = []
         i = 1
@@ -149,8 +133,7 @@ def parse_offer_description(text):
         return offers
 
     except Exception as e:
-        print("❌ Общая ошибка при парсинге задачи Jira:", str(e))
-        print("📄 Содержимое задачи:\n", text)
+        print("❌ Общая ошибка при парсинге полей Jira:", str(e))
         return []
 
 
