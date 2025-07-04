@@ -126,7 +126,7 @@ def parse_offer_fields(fields):
                     "payout_currency": "",  # ✅ Валюта пустая
                     "payout_auto": True,  # ✅ Галочка Параметром payout
                     "payout_upsell": True,  # ✅ Допродажи включены
-                    "payout_type": "per_action",  # ✅ Тип выплат = CPA
+                    "payout_type": "CPA",  # ✅ Тип выплат = CPA
                     "affiliate_network_id": AFFILIATE_NETWORKS.get(offer_data["pp"], 0),
                     "group_id": OFFER_GROUPS.get(offer_data["buyer"], 0) if offer_data["buyer"] else 0
                 }
