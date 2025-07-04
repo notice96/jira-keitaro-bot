@@ -61,14 +61,14 @@ def parse_offer_fields(fields):
     try:
         offer_data = {
             "id": fields.get("summary", "").split("{")[-1].split("}")[0],
-            "product": fields.get("customfield_10158", {}).get("value", "").strip(),
+            "product": fields.get("customfield_10158", "").strip(),  # ПП
             "geo": fields.get("customfield_10157", "").strip().upper(),
             "payout": str(fields.get("customfield_10190", "")).strip(),
             "currency": fields.get("customfield_10160", "").strip(),
             "cap": fields.get("customfield_10161", "").strip(),
             "source": fields.get("customfield_10162", "").strip(),
             "buyer": fields.get("customfield_10163", ""),  # ✅ Баер
-            "pp": fields.get("customfield_10138", "").strip()
+            "pp": fields.get("customfield_10138", {}).get("value", "").strip()  # Продукт
         }
 
         print("\n🧾 Спаршенные данные:")
