@@ -11,9 +11,18 @@ KEITARO_API_KEY = os.getenv("KEITARO_API_KEY")
 KEITARO_BASE_URL = os.getenv("KEITARO_BASE_URL")
 
 AFFILIATE_NETWORKS = {
+    "TSL": 55,
     "ExGaming": 54,
+    "Sparta": 53,
+    "Riddick’s Partners": 52,
+    "Godlike Partners": 51,
+    "1Win: 50,
+    "21stGold": 49,
+    "TRAFFLAB2": 48,
     "Glory Partners": 14,
-    "4RA PARTNER": 17
+    "4RA PARTNER": 17,
+    "TSL": 55
+    
 }
 
 OFFER_GROUPS = {
@@ -82,27 +91,22 @@ def parse_offer_fields(fields):
                 raw_url = line.strip("[]")
                 if "|" in raw_url:
                     raw_url = raw_url.split("|")[0]
-                clean_url = unquote(raw_url.replace("⊂", "&"))
+
+                # 🛠 Фиксим сломанные символы ⊂_id -> &sub_id
+                clean_url = unquote(raw_url.replace("⊂_id", "&sub_id"))
 
                 if i + 1 < len(lines) and ("sub_id" in lines[i + 1] or "⊂" in lines[i + 1]):
                     param_line = lines[i + 1].strip("[]")
                     if "|" in param_line:
                         param_line = param_line.split("|")[0]
-                    decoded = unquote(param_line.replace("⊂", "&"))
+                    decoded = unquote(param_line.replace("⊂_id", "&sub_id"))
                     if decoded.startswith("&"):
                         clean_url += decoded
                     else:
                         clean_url += "&" + decoded
                     i += 1
 
-                try:
-                    payout_value = float(offer_data["payout"])
-                except ValueError:
-                    print(f"❌ Ошибка: ставка ('Ставка') не число: {offer_data['payout']}")
-                    i += 1
-                    continue
-
-                # 📝 Строим имя без buyer если оно пустое
+                # 📝 Строим имя без buyer если он пустой
                 buyer_part = f" Баер: {offer_data['buyer']}" if offer_data["buyer"] else ""
 
                 offer = {
@@ -114,15 +118,15 @@ def parse_offer_fields(fields):
                     "notes": "",
                     "action_type": "http",
                     "offer_type": "external",
-                    "conversion_cap_enabled": False,
+                    "conversion_cap_enabled": False,  # ✅ Conversion cap = Нет
                     "daily_cap": 0,
                     "conversion_timezone": "UTC",
                     "alternative_offer_id": 0,
                     "values": "",
-                    "payout_value": payout_value,
-                    "payout_currency": offer_data["currency"],
-                    "payout_auto": True,  # ✅ Галочка payout
-                    "payout_upsell": False,
+                    "payout_value": 0,  # ✅ Выплата = 0
+                    "payout_currency": "",  # ✅ Валюта пустая
+                    "payout_auto": True,  # ✅ Галочка Параметром payout
+                    "payout_upsell": True,  # ✅ Допродажи включены
                     "affiliate_network_id": AFFILIATE_NETWORKS.get(offer_data["pp"], 0),
                     "group_id": OFFER_GROUPS.get(offer_data["buyer"], 0) if offer_data["buyer"] else 0
                 }
