@@ -34,8 +34,8 @@ async def root():
 @app.post("/jira-to-keitaro")
 async def jira_to_keitaro(request: Request):
     body = await request.json()
-    issue = body.get("issue", {})
-    fields = issue.get("fields", {})
+    fields = body.get("issue", {}).get("fields", {})
+
     parsed_data = parse_offer_fields(fields)
 
     if not parsed_data:
@@ -48,29 +48,32 @@ async def jira_to_keitaro(request: Request):
 
     return {"message": "Offers processed.", "results": created_offers}
 
+
 def parse_offer_fields(fields):
     try:
         offer_data = {
-            "id": fields.get("summary", "").replace("id_prod{", "").replace("}", "").strip(),
+            "id": fields.get("summary", "").split("{")[-1].split("}")[0],
             "product": fields.get("customfield_10138", {}).get("value", "").strip(),
             "geo": fields.get("customfield_10157", "").strip().upper(),
-            "payout": fields.get("customfield_10159", ""),
+            "payout": str(fields.get("customfield_10190", "")).strip(),
             "currency": fields.get("customfield_10160", "").strip(),
             "cap": fields.get("customfield_10161", "").strip(),
             "source": fields.get("customfield_10162", "").strip(),
-            "buyer": fields.get("customfield_10164", "").strip(),
-            "pp": fields.get("customfield_10158", "").strip(),
-            "links": fields.get("customfield_10165", "")
+            "buyer": fields.get("customfield_10163", ""),  # ✅ Баер
+            "pp": fields.get("customfield_10158", "").strip()
         }
 
         print("\n🧾 Спаршенные данные:")
         for k, v in offer_data.items():
             print(f"{k}: {v}")
 
-        offers = []
-        soup = BeautifulSoup(offer_data["links"], "html.parser")
+        soup = BeautifulSoup(fields.get("customfield_10165", ""), "html.parser")
         lines = [line.strip() for line in soup.get_text().splitlines() if line.strip()]
+        print("\n🌐 Все строки из ссылок:")
+        for idx, l in enumerate(lines):
+            print(f"{idx + 1}: {l}")
 
+        offers = []
         i = 1
         while i < len(lines):
             line = lines[i]
@@ -99,10 +102,13 @@ def parse_offer_fields(fields):
                     i += 1
                     continue
 
+                # 📝 Строим имя без buyer если оно пустое
+                buyer_part = f" Баер: {offer_data['buyer']}" if offer_data["buyer"] else ""
+
                 offer = {
                     "name": f"id_prod{{{offer_data['id']}}} - Продукт: {offer_data['product']} Гео: {offer_data['geo']} "
                             f"Ставка: {offer_data['payout']} Валюта: {offer_data['currency']} Капа: {offer_data['cap']} "
-                            f"Сорс: {offer_data['source']} Баер: {offer_data['buyer']} - {label}",
+                            f"Сорс: {offer_data['source']}{buyer_part} - {label}",
                     "action_payload": clean_url,
                     "country": [offer_data["geo"]],
                     "notes": "",
@@ -115,11 +121,10 @@ def parse_offer_fields(fields):
                     "values": "",
                     "payout_value": payout_value,
                     "payout_currency": offer_data["currency"],
-                    "payout_type": "auto",
-                    "payout_auto": True,
+                    "payout_auto": True,  # ✅ Галочка payout
                     "payout_upsell": False,
                     "affiliate_network_id": AFFILIATE_NETWORKS.get(offer_data["pp"], 0),
-                    "group_id": OFFER_GROUPS.get(offer_data["buyer"], 0)
+                    "group_id": OFFER_GROUPS.get(offer_data["buyer"], 0) if offer_data["buyer"] else 0
                 }
                 print(f"\n✅ Оффер добавлен: {offer['name']}")
                 offers.append(offer)
@@ -130,8 +135,9 @@ def parse_offer_fields(fields):
         return offers
 
     except Exception as e:
-        print("❌ Общая ошибка при парсинге задачи Jira:", str(e))
+        print("❌ Ошибка при обработке полей:", str(e))
         return []
+
 
 async def create_keitaro_offer(offer_data):
     url = KEITARO_BASE_URL
