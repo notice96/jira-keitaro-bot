@@ -44,6 +44,7 @@ async def jira_to_keitaro(request: Request):
     body = await request.json()
     issue = body.get("issue", {})
     fields = issue.get("fields", {})
+
     parsed_data = parse_offer_fields(fields)
 
     if not parsed_data:
@@ -58,6 +59,7 @@ async def jira_to_keitaro(request: Request):
 
 def parse_offer_fields(fields):
     try:
+        print("\n🧾 Извлечённые поля задачи:")
         offer_data = {
             "id": fields.get("summary", "").replace("id_prod{", "").replace("}", ""),
             "product": fields.get("customfield_10158", ""),
@@ -66,45 +68,51 @@ def parse_offer_fields(fields):
             "currency": fields.get("customfield_10160", ""),
             "cap": fields.get("customfield_10161", ""),
             "source": fields.get("customfield_10162", ""),
-            "buyer": fields.get("customfield_10163", ""),
+            "buyer": fields.get("customfield_10164", ""),
             "pp": fields.get("customfield_10138", {}).get("value", ""),
-            "links": fields.get("customfield_10165", "")
+            "landings": fields.get("customfield_10165", "")
         }
 
-        print("\n🧾 Спаршенные данные:")
         for k, v in offer_data.items():
             print(f"{k}: {v}")
 
-        # Разбор ссылок
-        links_text = offer_data["links"]
-        lines = [line.strip() for line in links_text.splitlines() if line.strip()]
-        print("\n🔗 Все строки из ссылок:")
-        for idx, l in enumerate(lines):
+        offers = []
+        landings_lines = [line.strip() for line in offer_data["landings"].splitlines() if line.strip()]
+        
+        print("\n📥 Все строки из ссылок:")
+        for idx, l in enumerate(landings_lines):
             print(f"{idx + 1}: {l}")
 
-        offers = []
         i = 1
-        while i < len(lines):
-            line = lines[i]
+        while i < len(landings_lines):
+            line = landings_lines[i]
             if "http" in line:
-                label = lines[i - 1]
+                label = landings_lines[i - 1]
                 raw_url = line.strip("[]")
                 if "|" in raw_url:
                     raw_url = raw_url.split("|")[0]
                 clean_url = unquote(
-                    raw_url.replace("⊂sub_id", "&sub_id").replace("⊂_id", "&sub_id")
+                    raw_url.replace("⊂_id", "&sub_id")
                 )
 
                 try:
                     payout_value = float(offer_data["payout"])
                 except (ValueError, TypeError):
-                    print(f"⚠️ Ставка не число: {offer_data['payout']}, ставим 0")
-                    payout_value = 0
+                    print(f"❌ Ошибка: ставка ('Ставка') не число: {offer_data['payout']}")
+                    i += 1
+                    continue
+
+                offer_name = (
+                    f"id_prod{{{offer_data['id']}}} - Продукт: {offer_data['product']} "
+                    f"Гео: {offer_data['geo']} Ставка: {offer_data['payout']} Валюта: {offer_data['currency']} "
+                    f"Капа: {offer_data['cap']} Сорс: {offer_data['source']}"
+                )
+                if offer_data['buyer']:
+                    offer_name += f" Баер: {offer_data['buyer']}"
+                offer_name += f" - {label}"
 
                 offer = {
-                    "name": f"id_prod{{{offer_data['id']}}} - Продукт: {offer_data['product']} Гео: {offer_data['geo']} "
-                            f"Ставка: {offer_data['payout']} Валюта: {offer_data['currency']} Капа: {offer_data['cap']} "
-                            f"Сорс: {offer_data['source']}" + (f" Баер: {offer_data['buyer']}" if offer_data['buyer'] else '') + f" - {label}",
+                    "name": offer_name,
                     "action_payload": clean_url,
                     "country": [offer_data["geo"]],
                     "notes": "",
@@ -115,10 +123,7 @@ def parse_offer_fields(fields):
                     "conversion_timezone": "UTC",
                     "alternative_offer_id": 0,
                     "values": "",
-                    "payout_auto": True,  # ✅ Включаем параметр 'payout'
-                    "payout_value": 0,    # ⬅️ Выплата не проставляется
-                    "payout_currency": "",  # ⬅️ Валюта не проставляется
-                    "payout_type": "cpa",   # ✅ Тип выплат = CPA
+                    "payout_auto": True,  # ✅ Включить чекбокс payout
                     "payout_upsell": True,
                     "affiliate_network_id": AFFILIATE_NETWORKS.get(offer_data["pp"], 0),
                     "group_id": OFFER_GROUPS.get(offer_data["buyer"], 0)
@@ -132,7 +137,7 @@ def parse_offer_fields(fields):
         return offers
 
     except Exception as e:
-        print("❌ Ошибка при парсинге Jira:", str(e))
+        print("❌ Общая ошибка при парсинге задачи Jira:", str(e))
         return []
 
 async def create_keitaro_offer(offer_data):
