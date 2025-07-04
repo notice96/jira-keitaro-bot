@@ -16,7 +16,7 @@ AFFILIATE_NETWORKS = {
     "Sparta": 53,
     "Riddick’s Partners": 52,
     "Godlike Partners": 51,
-    "1Win: 50,
+    "1Win": 50,
     "21stGold": 49,
     "TRAFFLAB2": 48,
     "Glory Partners": 14,
