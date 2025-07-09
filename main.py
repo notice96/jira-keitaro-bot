@@ -166,12 +166,13 @@ async def create_keitaro_offer(offer_data):
 async def send_telegram_message(offer):
     try:
         id_str = offer["name"].split("{")[1].split("}")[0]
+        product_name = offer['name'].split("Продукт:")[1].split("Гео:")[0].strip()
         buyer_display = offer.get("buyer", "[ПУСТО]") or "[ПУСТО]"
 
         message_text = (
             f"🎯 *Новый оффер успешно создан в Keitaro:*\n\n"
             f"📌 *id_prod{{{id_str}}}*\n"
-            f"🤝 *Продукт:* {offer['product']}\n"
+            f"🤝 *Продукт:* {product_name}\n"
             f"🌍 *Гео:* {offer['country'][0]}\n"
             f"💰 *Ставка:* {offer['payout_value']} {offer['payout_currency']}\n"
             f"📈 *Капа:* {offer['cap']}\n"
