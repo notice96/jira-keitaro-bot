@@ -60,8 +60,7 @@ async def jira_to_keitaro(request: Request):
     for offer in parsed_data:
         response = await create_keitaro_offer(offer)
         created_offers.append(response)
-        await send_telegram_message(offer)
-
+        await send_telegram_message(offer_data, offer)
     return {"message": "Offers processed.", "results": created_offers}
 
 def parse_offer_fields(fields):
