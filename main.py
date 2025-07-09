@@ -60,7 +60,7 @@ async def jira_to_keitaro(request: Request):
     for offer in parsed_data:
         response = await create_keitaro_offer(offer)
         created_offers.append(response)
-        await send_telegram_message(parsed_data, offer)
+        await send_telegram_message(offer)
 
     return {"message": "Offers processed.", "results": created_offers}
 
@@ -163,37 +163,33 @@ async def create_keitaro_offer(offer_data):
         return {"error": str(e)}
 
 
-async def send_telegram_message(parsed_info, offer):
-    id_str = parsed_info["id"]
-    product = parsed_info["product"]
-    geo = parsed_info["geo"]
-    payout = parsed_info["payout"]
-    currency = parsed_info["currency"]
-    cap = parsed_info["cap"]
-    source = parsed_info["source"]
-    buyer = parsed_info["buyer"]
-
-    buyer_part = f"\n👤 Баер: {buyer}" if buyer else ""
-
-    message_text = (
-        f"🎯 Новый оффер успешно создан в Keitaro:\n\n"
-        f"📌 id_prod{{{id_str}}}\n"
-        f"🤝 Продукт: {product}\n"
-        f"🌍 Гео: {geo}\n"
-        f"💰 Ставка: {payout} {currency}\n"
-        f"📈 Капа: {cap}\n"
-        f"📲 Сорс: {source}"
-        f"{buyer_part}"
-    )
-
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message_text
-    }
-
+async def send_telegram_message(offer):
     try:
+        id_str = offer["name"].split("{")[1].split("}")[0]
+        buyer_display = offer.get("buyer", "[ПУСТО]") or "[ПУСТО]"
+
+        message_text = (
+            f"🎯 *Новый оффер успешно создан в Keitaro:*\n\n"
+            f"📌 *id_prod{{{id_str}}}*\n"
+            f"🤝 *Продукт:* {offer['product']}\n"
+            f"🌍 *Гео:* {offer['country'][0]}\n"
+            f"💰 *Ставка:* {offer['payout_value']} {offer['payout_currency']}\n"
+            f"📈 *Капа:* {offer['cap']}\n"
+            f"📲 *Сорс:* {offer['source']}\n"
+            f"👤 *Баер:* {buyer_display}\n"
+        )
+
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message_text,
+            "parse_mode": "Markdown"
+        }
+
+        print("\n📨 Отправляем уведомление в Telegram...")
         async with httpx.AsyncClient() as client:
-            response = await client.post(TELEGRAM_API_URL, json=payload)
-            print("📤 Результат отправки:", response.json())
+            tg_response = await client.post(f"{TELEGRAM_API_URL}/sendMessage", json=payload)
+            print("📤 Telegram ответ:", tg_response.status_code, tg_response.text)
+
     except Exception as e:
         print("❌ Ошибка при отправке сообщения в Telegram:", str(e))
+
