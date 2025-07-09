@@ -23,7 +23,6 @@ AFFILIATE_NETWORKS = {
     "TRAFFLAB2": 48,
     "Glory Partners": 14,
     "4RA PARTNER": 17
-    
 }
 
 OFFER_GROUPS = {
@@ -55,6 +54,10 @@ async def jira_to_keitaro(request: Request):
     for offer in parsed_data:
         response = await create_keitaro_offer(offer)
         created_offers.append(response)
+        
+        # 🟣 Отправка уведомления в Telegram
+        print("📨 Отправляем уведомление в Telegram...")
+        await send_telegram_notification(offer)
 
     return {"message": "Offers processed.", "results": created_offers}
 
@@ -69,8 +72,8 @@ def parse_offer_fields(fields):
             "currency": fields.get("customfield_10160", "").strip(),
             "cap": fields.get("customfield_10161", "").strip(),
             "source": fields.get("customfield_10162", "").strip(),
-            "buyer": (fields.get("customfield_10163") or {}).get("value", ""),  # ✅ safe get buyer
-            "pp": fields.get("customfield_10138", {}).get("value", "").strip()
+            "buyer": fields.get("customfield_10163", {}).get("value", ""),  # ✅ Баер как value
+            "pp": fields.get("customfield_10138", {}).get("value", "").strip()  # Продукт как ПП
         }
 
         print("\n🧾 Спаршенные данные:")
@@ -92,8 +95,6 @@ def parse_offer_fields(fields):
                 raw_url = line.strip("[]")
                 if "|" in raw_url:
                     raw_url = raw_url.split("|")[0]
-
-                # 🛠 Фиксим сломанные символы ⊂_id -> &sub_id
                 clean_url = unquote(raw_url.replace("⊂_id", "&sub_id"))
 
                 if i + 1 < len(lines) and ("sub_id" in lines[i + 1] or "⊂" in lines[i + 1]):
@@ -107,7 +108,6 @@ def parse_offer_fields(fields):
                         clean_url += "&" + decoded
                     i += 1
 
-                # 📝 Строим имя без buyer если он пустой
                 buyer_part = f" Баер: {offer_data['buyer']}" if offer_data["buyer"] else ""
 
                 offer = {
@@ -119,16 +119,16 @@ def parse_offer_fields(fields):
                     "notes": "",
                     "action_type": "http",
                     "offer_type": "external",
-                    "conversion_cap_enabled": False,  # ✅ Conversion cap = Нет
+                    "conversion_cap_enabled": False,
                     "daily_cap": 0,
                     "conversion_timezone": "UTC",
                     "alternative_offer_id": 0,
                     "values": "",
-                    "payout_value": 0,  # ✅ Выплата = 0
-                    "payout_currency": "",  # ✅ Валюта пустая
-                    "payout_auto": True,  # ✅ Галочка Параметром payout
-                    "payout_upsell": True,  # ✅ Допродажи включены
-                    "payout_type": "CPA",  # ✅ Тип выплат = CPA
+                    "payout_value": 0,  # Выплата = 0
+                    "payout_currency": "",  # Валюта пустая
+                    "payout_auto": True,  # Параметром payout
+                    "payout_upsell": True,  # Допродажи включены
+                    "payout_type": "CPA",  # ✅ Тип выплат CPA
                     "affiliate_network_id": AFFILIATE_NETWORKS.get(offer_data["pp"], 0),
                     "group_id": OFFER_GROUPS.get(offer_data["buyer"], 0) if offer_data["buyer"] else 0
                 }
@@ -166,6 +166,7 @@ async def create_keitaro_offer(offer_data):
             "status_code": 500,
             "response": f"Ошибка при отправке оффера: {str(e)}"
         }
+
 
 async def send_telegram_notification(offer_data):
     try:
