@@ -14,7 +14,6 @@ KEITARO_BASE_URL = os.getenv("KEITARO_BASE_URL")
 # ✅ Данные для Telegram
 TELEGRAM_BOT_TOKEN = "8164983384:AAEwkdYx-tdmc5oqj4KL6MtR7pfkY0e0qMw"
 TELEGRAM_CHAT_ID = "-1002430721164"
-TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
 def log_field(field_name, value):
     print(f"🔍 {field_name}: {value if value else '[ПУСТО]'}")
@@ -61,7 +60,8 @@ async def jira_to_keitaro(request: Request):
     for offer in parsed_data:
         response = await create_keitaro_offer(offer)
         created_offers.append(response)
-        await send_telegram_message(offer, offer)
+        await send_telegram_message(offer)
+
     return {"message": "Offers processed.", "results": created_offers}
 
 def parse_offer_fields(fields):
@@ -163,41 +163,24 @@ async def create_keitaro_offer(offer_data):
         return {"error": str(e)}
 
 
-async def send_telegram_message(parsed_info, offer):
+async def send_telegram_message(parsed_info):
     try:
-        # parsed_info уже содержит финальные данные
-        id_str = parsed_info.get("name", "[ПУСТО]").split("{")[-1].split("}")[0]
-        product = parsed_info.get("name", "[ПУСТО]").split("Продукт:")[-1].split("Гео:")[0].strip()
-        geo = parsed_info.get("country", ["[ПУСТО]"])[0]
-        payout = parsed_info.get("payout_value", "[ПУСТО]")
-        currency = parsed_info.get("payout_currency", "[ПУСТО]")
-        cap = parsed_info.get("name", "[ПУСТО]").split("Капа:")[-1].split("Сорс:")[0].strip()
-        source = parsed_info.get("name", "[ПУСТО]").split("Сорс:")[-1].split("-")[0].strip()
-        buyer = parsed_info.get("name", "").split("Баер:")[-1].split("-")[0].strip()
-        if not buyer or "Баер" not in parsed_info.get("name", ""):
-            buyer = "[ПУСТО]"
-        
-        message_text = (
-            f"🎯 *Новый оффер успешно создан в Keitaro:*\n\n"
-            f"📌 *id_prod{{{id_str}}}*\n"
-            f"🤝 *Продукт:* {product}\n"
-            f"🌍 *Гео:* {geo}\n"
-            f"💰 *Ставка:* {payout} {currency}\n"
-            f"📈 *Капа:* {cap}\n"
-            f"📲 *Сорс:* {source}\n"
-            f"👤 *Баер:* {buyer}\n"
+        message = (
+            "🎯 Новый оффер успешно создан в Keitaro:\n\n"
+            f"📌 id_prod{{{parsed_info['id']}}}\n"
+            f"🤝 Продукт: {parsed_info['product']}\n"
+            f"🌍 Гео: {parsed_info['geo']}\n"
+            f"💰 Ставка: {parsed_info['payout']} {parsed_info['currency']}\n"
+            f"📈 Капа: {parsed_info['cap']}\n"
+            f"📲 Сорс: {parsed_info['source']}\n"
+            f"👤 Баер: {parsed_info['buyer'] if parsed_info['buyer'] else '—'}"
         )
-
         payload = {
             "chat_id": TELEGRAM_CHAT_ID,
-            "text": message_text,
-            "parse_mode": "Markdown"
+            "text": message
         }
-
-        print("\n📨 Отправляем уведомление в Telegram...")
         async with httpx.AsyncClient() as client:
-            tg_response = await client.post(f"{TELEGRAM_API_URL}/sendMessage", json=payload)
-            print("📤 Telegram ответ:", tg_response.status_code, tg_response.text)
-
+            response = await client.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json=payload)
+            print("📨 Отправка в Telegram:", response.status_code, response.text)
     except Exception as e:
         print("❌ Ошибка при отправке сообщения в Telegram:", str(e))
