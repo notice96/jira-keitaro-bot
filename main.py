@@ -170,7 +170,7 @@ async def create_keitaro_offer(offer_data):
 
 async def send_telegram_notification(offer_data):
     try:
-        buyer_line = f"\n👤 Баер: {offer_data['buyer']}" if offer_data["buyer"] else ""
+        buyer_line = f"\n👤 Баер: {offer_data.get('buyer')}" if offer_data.get("buyer") else ""
         message = (
             f"🎯 Новый оффер успешно создан в Keitaro:\n\n"
             f"📌 id_prod{{{offer_data['id']}}}\n"
@@ -178,8 +178,7 @@ async def send_telegram_notification(offer_data):
             f"🌍 Гео: {offer_data['geo']}\n"
             f"💰 Ставка: {offer_data['payout']} {offer_data['currency']}\n"
             f"📈 Капа: {offer_data['cap']}\n"
-            f"📲 Сорс: {offer_data['source']}"
-            f"{buyer_line}"
+            f"📲 Сорс: {offer_data['source']}{buyer_line}"
         )
 
         telegram_api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
