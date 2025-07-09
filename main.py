@@ -164,3 +164,31 @@ async def create_keitaro_offer(offer_data):
             "status_code": 500,
             "response": f"Ошибка при отправке оффера: {str(e)}"
         }
+
+async def send_telegram_notification(offer):
+    message_lines = [
+        "🎯 Новый оффер успешно создан в Keitaro:\n",
+        f"📌 {offer['name'].split(' - ')[0]}",
+        f"🤝 Продукт: {offer['name'].split('Продукт: ')[-1].split(' Гео')[0]}",
+        f"🌍 Гео: {offer['country'][0]}",
+        f"💰 Ставка: {offer['payout_value']} {offer['payout_currency']}",
+        f"📈 Капа: {offer['daily_cap']} fd",
+        f"📲 Сорс: {offer['action_payload']}",
+    ]
+    # Добавляем buyer если есть
+    if offer['group_id']:
+        message_lines.append(f"👤 Баер: {offer['name'].split('Баер: ')[-1].split(' - ')[0]}")
+    message = "\n".join(message_lines)
+
+    telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(telegram_url, json=payload)
+            print("📤 Отправлено в Telegram:", response.status_code, response.text)
+    except Exception as e:
+        print("❌ Ошибка при отправке в Telegram:", str(e))
