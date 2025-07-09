@@ -53,6 +53,7 @@ async def jira_to_keitaro(request: Request):
     created_offers = []
     for offer in parsed_data:
         response = await create_keitaro_offer(offer)
+        await send_telegram_message(offer)
         created_offers.append(response)
         
         # 🟣 Отправка уведомления в Telegram
