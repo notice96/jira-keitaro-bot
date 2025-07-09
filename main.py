@@ -163,21 +163,27 @@ async def create_keitaro_offer(offer_data):
         return {"error": str(e)}
 
 
-async def send_telegram_message(offer):
+async def send_telegram_message(parsed_info, offer):
     try:
-        id_str = offer["name"].split("{")[1].split("}")[0]
-        product_name = offer['name'].split("Продукт:")[1].split("Гео:")[0].strip()
-        buyer_display = offer.get("buyer", "[ПУСТО]") or "[ПУСТО]"
-
+        # Достаем данные из parsed_info (парсинг Jira)
+        id_str = parsed_info.get("id", "[ПУСТО]")
+        product = parsed_info.get("product", "[ПУСТО]")
+        geo = parsed_info.get("geo", "[ПУСТО]")
+        payout = parsed_info.get("payout", "[ПУСТО]")
+        currency = parsed_info.get("currency", "[ПУСТО]")
+        cap = parsed_info.get("cap", "[ПУСТО]")
+        source = parsed_info.get("source", "[ПУСТО]")
+        buyer = parsed_info.get("buyer", "[ПУСТО]")
+        
         message_text = (
             f"🎯 *Новый оффер успешно создан в Keitaro:*\n\n"
             f"📌 *id_prod{{{id_str}}}*\n"
-            f"🤝 *Продукт:* {product_name}\n"
-            f"🌍 *Гео:* {offer['country'][0]}\n"
-            f"💰 *Ставка:* {offer['payout_value']} {offer['payout_currency']}\n"
-            f"📈 *Капа:* {offer['cap']}\n"
-            f"📲 *Сорс:* {offer['source']}\n"
-            f"👤 *Баер:* {buyer_display}\n"
+            f"🤝 *Продукт:* {product}\n"
+            f"🌍 *Гео:* {geo}\n"
+            f"💰 *Ставка:* {payout} {currency}\n"
+            f"📈 *Капа:* {cap}\n"
+            f"📲 *Сорс:* {source}\n"
+            f"👤 *Баер:* {buyer}\n"
         )
 
         payload = {
@@ -193,4 +199,3 @@ async def send_telegram_message(offer):
 
     except Exception as e:
         print("❌ Ошибка при отправке сообщения в Telegram:", str(e))
-
