@@ -60,7 +60,7 @@ async def jira_to_keitaro(request: Request):
     for offer in parsed_data:
         response = await create_keitaro_offer(offer)
         created_offers.append(response)
-        await send_telegram_message(offer_data, offer)
+        await send_telegram_message(offer, offer)
     return {"message": "Offers processed.", "results": created_offers}
 
 def parse_offer_fields(fields):
@@ -164,15 +164,17 @@ async def create_keitaro_offer(offer_data):
 
 async def send_telegram_message(parsed_info, offer):
     try:
-        # Достаем данные из parsed_info (парсинг Jira)
-        id_str = parsed_info.get("id", "[ПУСТО]")
-        product = parsed_info.get("product", "[ПУСТО]")
-        geo = parsed_info.get("geo", "[ПУСТО]")
-        payout = parsed_info.get("payout", "[ПУСТО]")
-        currency = parsed_info.get("currency", "[ПУСТО]")
-        cap = parsed_info.get("cap", "[ПУСТО]")
-        source = parsed_info.get("source", "[ПУСТО]")
-        buyer = parsed_info.get("buyer", "[ПУСТО]")
+        # parsed_info уже содержит финальные данные
+        id_str = parsed_info.get("name", "[ПУСТО]").split("{")[-1].split("}")[0]
+        product = parsed_info.get("name", "[ПУСТО]").split("Продукт:")[-1].split("Гео:")[0].strip()
+        geo = parsed_info.get("country", ["[ПУСТО]"])[0]
+        payout = parsed_info.get("payout_value", "[ПУСТО]")
+        currency = parsed_info.get("payout_currency", "[ПУСТО]")
+        cap = parsed_info.get("name", "[ПУСТО]").split("Капа:")[-1].split("Сорс:")[0].strip()
+        source = parsed_info.get("name", "[ПУСТО]").split("Сорс:")[-1].split("-")[0].strip()
+        buyer = parsed_info.get("name", "").split("Баер:")[-1].split("-")[0].strip()
+        if not buyer or "Баер" not in parsed_info.get("name", ""):
+            buyer = "[ПУСТО]"
         
         message_text = (
             f"🎯 *Новый оффер успешно создан в Keitaro:*\n\n"
