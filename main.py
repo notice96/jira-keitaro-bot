@@ -13,7 +13,7 @@ KEITARO_BASE_URL = os.getenv("KEITARO_BASE_URL")
 
 # ✅ Данные для Telegram
 TELEGRAM_BOT_TOKEN = "8164983384:AAEwkdYx-tdmc5oqj4KL6MtR7pfkY0e0qMw"
-TELEGRAM_CHAT_ID = "@PushXTeam"
+TELEGRAM_CHAT_ID = "-1002430721164"
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
 def log_field(field_name, value):
