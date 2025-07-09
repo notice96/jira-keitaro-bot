@@ -163,24 +163,28 @@ async def create_keitaro_offer(offer_data):
         return {"error": str(e)}
 
 
-async def send_telegram_message(parsed_info):
+async def send_telegram_message(offer_data):
     try:
-        message = (
-            "🎯 Новый оффер успешно создан в Keitaro:\n\n"
-            f"📌 id_prod{{{parsed_info['id']}}}\n"
-            f"🤝 Продукт: {parsed_info['product']}\n"
-            f"🌍 Гео: {parsed_info['geo']}\n"
-            f"💰 Ставка: {parsed_info['payout']} {parsed_info['currency']}\n"
-            f"📈 Капа: {parsed_info['cap']}\n"
-            f"📲 Сорс: {parsed_info['source']}\n"
-            f"👤 Баер: {parsed_info['buyer'] if parsed_info['buyer'] else '—'}"
+        buyer_part = f"\n👤 Баер: {offer_data['buyer']}" if offer_data.get("buyer") else ""
+        message_text = (
+            f"🎯 Новый оффер успешно создан в Keitaro:\n\n"
+            f"📌 id_prod{{{offer_data['id']}}}\n"
+            f"🤝 Продукт: {offer_data['product']}\n"
+            f"🌍 Гео: {offer_data['geo']}\n"
+            f"💰 Ставка: {offer_data['payout']} {offer_data['currency']}\n"
+            f"📈 Капа: {offer_data['cap']}\n"
+            f"📲 Сорс: {offer_data['source']}"
+            f"{buyer_part}"
         )
+
         payload = {
             "chat_id": TELEGRAM_CHAT_ID,
-            "text": message
+            "text": message_text
         }
+
         async with httpx.AsyncClient() as client:
-            response = await client.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json=payload)
-            print("📨 Отправка в Telegram:", response.status_code, response.text)
+            response = await client.post(TELEGRAM_API_URL, json=payload)
+            print(f"📤 Telegram ответ: {response.status_code} {response.text}")
+
     except Exception as e:
-        print("❌ Ошибка при отправке сообщения в Telegram:", str(e))
+        print(f"❌ Ошибка при отправке сообщения в Telegram: {str(e)}")
