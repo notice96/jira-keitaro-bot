@@ -67,7 +67,7 @@ def parse_offer_fields(fields):
             "currency": fields.get("customfield_10160", "").strip(),
             "cap": fields.get("customfield_10161", "").strip(),
             "source": fields.get("customfield_10162", "").strip(),
-            "buyer": fields.get("customfield_10163", ""),  # ✅ Баер
+            "buyer": fields.get("customfield_10163", {}).get("value", ""),  # ✅ Баер
             "pp": fields.get("customfield_10138", {}).get("value", "").strip()  # Продукт
         }
 
