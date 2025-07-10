@@ -9,8 +9,10 @@ app = FastAPI()
 
 KEITARO_API_KEY = os.getenv("KEITARO_API_KEY")
 KEITARO_BASE_URL = os.getenv("KEITARO_BASE_URL")
-TELEGRAM_BOT_TOKEN = "8164983384:AAEwkdYx-tdmc5oqj4KL6MtR7pfkY0e0qMw"
-TELEGRAM_CHAT_ID = "-1002430721164"
+
+TELEGRAM_BOT_TOKEN = "8164983384:AAEwkdYx-tdmc5oqj4KL6MtR7pfkY0e0qMw"  # твой токен
+TELEGRAM_CHAT_ID = "-1002430721164"  # id твоего канала
+TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
 AFFILIATE_NETWORKS = {
     "TSL": 55,
@@ -53,8 +55,8 @@ async def jira_to_keitaro(request: Request):
     created_offers = []
     for offer in parsed_data:
         response = await create_keitaro_offer(offer)
-        await send_telegram_message(offer)
         created_offers.append(response)
+        await send_telegram_message(offer, offer)
         
         # 🟣 Отправка уведомления в Telegram
         print("📨 Отправляем уведомление в Telegram...")
@@ -169,28 +171,28 @@ async def create_keitaro_offer(offer_data):
         }
 
 
-async def send_telegram_notification(offer_data):
+async def send_telegram_message(parsed_info, offer):
     try:
-        buyer_line = f"\n👤 Баер: {offer_data.get('buyer')}" if offer_data.get("buyer") else ""
-        message = (
+        message_text = (
             f"🎯 Новый оффер успешно создан в Keitaro:\n\n"
-            f"📌 id_prod{{{offer_data['id']}}}\n"
-            f"🤝 Продукт: {offer_data['product']}\n"
-            f"🌍 Гео: {offer_data['geo']}\n"
-            f"💰 Ставка: {offer_data['payout']} {offer_data['currency']}\n"
-            f"📈 Капа: {offer_data['cap']}\n"
-            f"📲 Сорс: {offer_data['source']}{buyer_line}"
+            f"📌 id_prod{{{parsed_info['id']}}}\n"
+            f"🤝 Продукт: {parsed_info['product']}\n"
+            f"🌍 Гео: {parsed_info['geo']}\n"
+            f"💰 Ставка: {parsed_info['payout']} {parsed_info['currency']}\n"
+            f"📈 Капа: {parsed_info['cap']}\n"
+            f"📲 Сорс: {parsed_info['source']}\n"
+            f"👤 Баер: {parsed_info['buyer']}"
         )
 
-        telegram_api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         payload = {
             "chat_id": TELEGRAM_CHAT_ID,
-            "text": message
+            "text": message_text,
+            "parse_mode": "HTML"
         }
 
         async with httpx.AsyncClient() as client:
-            response = await client.post(telegram_api_url, json=payload)
-            print("📤 Результат отправки в Telegram:", response.status_code, response.text)
+            response = await client.post(TELEGRAM_API_URL, json=payload)
+            print("📨 Результат отправки в Telegram:", response.status_code, response.text)
 
     except Exception as e:
-        print("❌ Ошибка при отправке сообщения в Telegram:", str(e))
+        print(f"❌ Ошибка при отправке сообщения в Telegram: {e}")
