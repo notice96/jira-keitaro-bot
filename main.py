@@ -10,8 +10,8 @@ app = FastAPI()
 KEITARO_API_KEY = os.getenv("KEITARO_API_KEY")
 KEITARO_BASE_URL = os.getenv("KEITARO_BASE_URL")
 
-TELEGRAM_BOT_TOKEN = "8164983384:AAEwkdYx-tdmc5oqj4KL6MtR7pfkY0e0qMw"  # твой токен
-TELEGRAM_CHAT_ID = "-1002430721164"  # id твоего канала
+TELEGRAM_BOT_TOKEN = "8164983384:AAEwkdYx-tdmc5oqj4KL6MtR7pfkY0e0qMw"
+TELEGRAM_CHAT_ID = "-1002430721164"
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
 AFFILIATE_NETWORKS = {
@@ -38,9 +38,11 @@ OFFER_GROUPS = {
     "@toni7977": 29
 }
 
+
 @app.get("/")
 async def root():
     return {"message": "Server is running."}
+
 
 @app.post("/jira-to-keitaro")
 async def jira_to_keitaro(request: Request):
@@ -56,11 +58,10 @@ async def jira_to_keitaro(request: Request):
     for offer in parsed_data:
         response = await create_keitaro_offer(offer)
         created_offers.append(response)
-        await send_telegram_message(offer, offer)
-        
-        # 🟣 Отправка уведомления в Telegram
+
+        # Отправляем уведомление в Telegram
         print("📨 Отправляем уведомление в Telegram...")
-        await send_telegram_notification(offer)
+        await send_telegram_message(fields, offer)
 
     return {"message": "Offers processed.", "results": created_offers}
 
@@ -69,14 +70,14 @@ def parse_offer_fields(fields):
     try:
         offer_data = {
             "id": fields.get("summary", "").split("{")[-1].split("}")[0],
-            "product": fields.get("customfield_10158", "").strip(),  # ПП как product
+            "product": fields.get("customfield_10158", "").strip(),
             "geo": fields.get("customfield_10157", "").strip().upper(),
             "payout": str(fields.get("customfield_10190", "")).strip(),
             "currency": fields.get("customfield_10160", "").strip(),
             "cap": fields.get("customfield_10161", "").strip(),
             "source": fields.get("customfield_10162", "").strip(),
-            "buyer": ((fields.get("customfield_10163") or {}).get("value", "")),  # ✅ Баер как value
-            "pp": fields.get("customfield_10138", {}).get("value", "").strip()  # Продукт как ПП
+            "buyer": ((fields.get("customfield_10163") or {}).get("value", "")),
+            "pp": fields.get("customfield_10138", {}).get("value", "").strip()
         }
 
         print("\n🧾 Спаршенные данные:")
@@ -127,11 +128,11 @@ def parse_offer_fields(fields):
                     "conversion_timezone": "UTC",
                     "alternative_offer_id": 0,
                     "values": "",
-                    "payout_value": 0,  # Выплата = 0
-                    "payout_currency": "",  # Валюта пустая
-                    "payout_auto": True,  # Параметром payout
-                    "payout_upsell": True,  # Допродажи включены
-                    "payout_type": "CPA",  # ✅ Тип выплат CPA
+                    "payout_value": 0,
+                    "payout_currency": "",
+                    "payout_auto": True,
+                    "payout_upsell": True,
+                    "payout_type": "CPA",
                     "affiliate_network_id": AFFILIATE_NETWORKS.get(offer_data["pp"], 0),
                     "group_id": OFFER_GROUPS.get(offer_data["buyer"], 0) if offer_data["buyer"] else 0
                 }
@@ -171,17 +172,21 @@ async def create_keitaro_offer(offer_data):
         }
 
 
-async def send_telegram_message(parsed_info, offer):
+async def send_telegram_message(fields, offer):
     try:
+        # Собираем данные для уведомления
+        buyer_value = ((fields.get("customfield_10163") or {}).get("value", ""))
+        buyer_part = f"\n👤 Баер: {buyer_value}" if buyer_value else ""
+
         message_text = (
             f"🎯 Новый оффер успешно создан в Keitaro:\n\n"
-            f"📌 id_prod{{{parsed_info['id']}}}\n"
-            f"🤝 Продукт: {parsed_info['product']}\n"
-            f"🌍 Гео: {parsed_info['geo']}\n"
-            f"💰 Ставка: {parsed_info['payout']} {parsed_info['currency']}\n"
-            f"📈 Капа: {parsed_info['cap']}\n"
-            f"📲 Сорс: {parsed_info['source']}\n"
-            f"👤 Баер: {parsed_info['buyer']}"
+            f"📌 id_prod{{{fields.get('summary', '').split('{')[-1].split('}')[0]}}}\n"
+            f"🤝 Продукт: {fields.get('customfield_10158', '').strip()}\n"
+            f"🌍 Гео: {fields.get('customfield_10157', '').strip().upper()}\n"
+            f"💰 Ставка: {str(fields.get('customfield_10190', '')).strip()} {fields.get('customfield_10160', '').strip()}\n"
+            f"📈 Капа: {fields.get('customfield_10161', '').strip()}\n"
+            f"📲 Сорс: {fields.get('customfield_10162', '').strip()}"
+            f"{buyer_part}"
         )
 
         payload = {
@@ -192,7 +197,7 @@ async def send_telegram_message(parsed_info, offer):
 
         async with httpx.AsyncClient() as client:
             response = await client.post(TELEGRAM_API_URL, json=payload)
-            print("📨 Результат отправки в Telegram:", response.status_code, response.text)
+            print(f"📤 Telegram ответ: {response.status_code} {response.text}")
 
     except Exception as e:
         print(f"❌ Ошибка при отправке сообщения в Telegram: {e}")
