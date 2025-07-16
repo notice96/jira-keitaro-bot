@@ -15,6 +15,7 @@ TELEGRAM_CHAT_ID = "-1002430721164"  # id твоего канала
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
 AFFILIATE_NETWORKS = {
+    "Fame.space": 56,
     "TSL": 55,
     "ExGaming": 54,
     "Sparta": 53,
@@ -23,8 +24,52 @@ AFFILIATE_NETWORKS = {
     "1Win": 50,
     "21stGold": 49,
     "TRAFFLAB2": 48,
+    "Nexus": 47,
+    "convert-it": 46,
+    "Royal Partners": 45,
+    "Traffic Cake": 44,
+    "PMaffiliates": 43,
+    "PD partners": 42,
+    "Bananza": 41,
+    "ClickLead": 40,
+    "Betoholic": 39,
+    "Lotoclub": 38,
+    "Yesplay": 37,
+    "AffAvenue": 36,
+    "1Xbet": 35,
+    "paripesa": 34,
+    "3Snet": 33,
+    "Jim partners": 32,
+    "MelBet": 31,
+    "Mostbet Partners": 30,
+    "CoolAffs": 29,
+    "KeyAffiliates": 28,
+    "YYY": 27,
+    "Dugika": 26,
+    "INSIDE": 25,
+    "Spinarium": 24,
+    "Wilddicecasino": 23,
+    "Wewe media": 22,
+    "MB.Partners": 21,
+    "Space Partners": 20,
+    "Unoaffiliates": 19,
+    "LEON": 18,
+    "4RA PARTNER": 17,
+    "Monta partners": 16,
+    "Growe Partners": 15,
     "Glory Partners": 14,
-    "4RA PARTNER": 17
+    "Chilli partners": 13,
+    "Betmen": 12,
+    "Q-affs": 11,
+    "Wow Partners": 10,
+    "Profitov.Partners": 8,
+    "Cell.expert": 7,
+    "Con-fluence.agency": 6,
+    "Gamefun": 5,
+    "Advertise.net": 4,
+    "trafflab": 3,
+    "Q3.network": 2,
+    "Gagarin.partners": 1
 }
 
 OFFER_GROUPS = {
@@ -34,8 +79,7 @@ OFFER_GROUPS = {
     "@dzho666": 28,
     "@iliia_xteam": 30,
     "@julikjar": 33,
-    "@sequencezz": 40,
-    "@toni7977": 29
+    "@sequencezz": 40
 }
 
 @app.get("/")
