@@ -10,7 +10,7 @@ app = FastAPI()
 KEITARO_API_KEY = os.getenv("KEITARO_API_KEY")
 KEITARO_BASE_URL = os.getenv("KEITARO_BASE_URL")
 
-TELEGRAM_BOT_TOKEN = "8164983384:AAEwkdYx-tdmc5oqj4KL6MtR7pfkY0e0qMw"  # твой токен
+TELEGRAM_BOT_TOKEN = "7529472112:AAHtTIBHuv320tPGkU7632m7lKLVhEK4fdQ"  # твой токен
 TELEGRAM_CHAT_ID = "-1002430721164"  # id твоего канала
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
