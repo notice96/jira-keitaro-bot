@@ -75,6 +75,8 @@ AFFILIATE_NETWORKS = {
 }
 
 OFFER_GROUPS = {
+    "@swh1t3": 43,
+    "@sam1_337": 44,
     "@alihmaaff": 26,
     "@berrnard": 36,
     "@d_traffq": 41,
