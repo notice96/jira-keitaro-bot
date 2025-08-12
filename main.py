@@ -75,6 +75,7 @@ AFFILIATE_NETWORKS = {
 }
 
 OFFER_GROUPS = {
+    "@dimapizzaeater69": 48,
     "@g13lv": 45,
     "@swh1t3": 43,
     "@sam1_337": 44,
