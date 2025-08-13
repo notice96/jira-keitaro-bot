@@ -75,6 +75,7 @@ AFFILIATE_NETWORKS = {
 }
 
 OFFER_GROUPS = {
+    "@grindos1703": 50,
     "@dimapizzaeater69": 48,
     "@g13lv": 45,
     "@swh1t3": 43,
