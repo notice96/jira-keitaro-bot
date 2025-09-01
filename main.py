@@ -15,6 +15,7 @@ TELEGRAM_CHAT_ID = "-1002430721164"  # id твоего канала
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
 AFFILIATE_NETWORKS = {
+    "BetBoom Partners": 59,
     "Fonbet Partners": 58,
     "Elon Casino": 57,
     "Fame.space": 56,
